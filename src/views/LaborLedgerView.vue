@@ -8,7 +8,8 @@ const sessionInvite = () => getSession()?.invite_slug
 import { rowWorkDays } from '../calc/hours.js'
 import { computeLabor } from '../calc/settlement.js'
 import { downloadHtmlXls } from '../utils/exportXls.js'
-import { paintSettlementImage, downloadCanvasPng } from '../utils/shareImage.js'
+import { paintSettlementImage, canvasToDataUrl } from '../utils/shareImage.js'
+import SettlementPreview from '../components/SettlementPreview.vue'
 
 const router = useRouter()
 const ledger = ref(null)

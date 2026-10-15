@@ -25,8 +25,13 @@ export function paintSettlementImage(canvas, title, lines, total) {
   ctx.fillText(`总计 ${total} 元`, 48, y + 68)
 }
 
+export function canvasToDataUrl(canvas) {
+  return canvas.toDataURL('image/png')
+}
+
+/** @deprecated 优先用页内预览；仅桌面另存时再用 */
 export function downloadCanvasPng(canvas, fileName) {
-  const url = canvas.toDataURL('image/png')
+  const url = canvasToDataUrl(canvas)
   const a = document.createElement('a')
   a.href = url
   a.download = fileName || 'settlement.png'

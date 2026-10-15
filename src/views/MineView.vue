@@ -6,7 +6,8 @@ import { clearSession, getSession } from '../lib/session.js'
 import { rowWorkDays } from '../calc/hours.js'
 import { computeMixed } from '../calc/settlement.js'
 import { downloadHtmlXls } from '../utils/exportXls.js'
-import { paintSettlementImage, downloadCanvasPng } from '../utils/shareImage.js'
+import { paintSettlementImage, canvasToDataUrl } from '../utils/shareImage.js'
+import SettlementPreview from '../components/SettlementPreview.vue'
 
 const router = useRouter()
 const ledger = ref(null)
@@ -17,6 +18,8 @@ const truckUnitPrice = ref('')
 const laborUnitPrice = ref('')
 const canvasRef = ref(null)
 const savedHint = ref('')
+const previewOpen = ref(false)
+const previewSrc = ref('')
 
 const kind = computed(() => getSession()?.settlement_kind || 'mixed')
 
@@ -125,7 +128,8 @@ function shareImage() {
     lines,
     r.total
   )
-  downloadCanvasPng(canvasRef.value, 'settlement.png')
+  previewSrc.value = canvasToDataUrl(canvasRef.value)
+  previewOpen.value = true
 }
 
 function logout() {
@@ -205,5 +209,11 @@ function switchLedger() {
   </section>
 
   <canvas ref="canvasRef" style="display: none" />
+  <SettlementPreview
+    :open="previewOpen"
+    :src="previewSrc"
+    :title="ledger?.name || '结算图'"
+    @close="previewOpen = false"
+  />
   <div class="fab-space with-tabbar" />
 </template>
