@@ -3,6 +3,12 @@ import { computed, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import * as api from '../api/ledgerApi.js'
 import { ledgerHomeRoute } from '../router.js'
+import {
+  todayStr,
+  yesterdayStr,
+  simpleTruckCount,
+  formatSimpleTrucks
+} from '../utils/date.js'
 
 const route = useRoute()
 const router = useRouter()
@@ -21,16 +27,20 @@ const extraName = ref('')
 const extraAmount = ref('')
 const kind = computed(() => route.query.kind || 'mixed')
 const entryId = computed(() => route.query.id || '')
+const hint = ref('')
 
-function today() {
-  const d = new Date()
-  const m = `${d.getMonth() + 1}`.padStart(2, '0')
-  const day = `${d.getDate()}`.padStart(2, '0')
-  return `${d.getFullYear()}-${m}-${day}`
-}
+const truckStep = computed({
+  get() {
+    const n = simpleTruckCount(trucks.value)
+    return n == null ? null : n
+  },
+  set(v) {
+    trucks.value = formatSimpleTrucks(v)
+  }
+})
 
 onMounted(async () => {
-  date.value = today()
+  date.value = todayStr()
   if (!entryId.value) return
   try {
     const list = await api.listEntries()
@@ -64,6 +74,48 @@ function buildLaborNote(gs, workDays) {
     .map((g) => `${Number(g.people) || 0}人${Number(g.days) || 0}天`)
   if (!parts.length) return ''
   return `${parts.join(', ')}, 合计${workDays}天`
+}
+
+function bumpTruck(delta) {
+  const cur = simpleTruckCount(trucks.value)
+  const base = cur == null ? 0 : cur
+  trucks.value = formatSimpleTrucks(base + delta)
+}
+
+async function copyYesterday() {
+  err.value = ''
+  hint.value = ''
+  try {
+    const list = await api.listEntries()
+    const y = yesterdayStr()
+    const row =
+      list.filter((e) => e.date === y).slice(-1)[0] ||
+      list.filter((e) => e.date < date.value).slice(-1)[0]
+    if (!row) {
+      err.value = '没有可复制的昨日/上一条'
+      return
+    }
+    groups.value =
+      row.groups && row.groups.length
+        ? row.groups.map((g) => ({
+            people: String(g.people ?? ''),
+            days: String(g.days ?? '')
+          }))
+        : [{ people: '', days: '' }]
+    trucks.value = (row.fields && row.fields.trucks) || ''
+    laborNote.value = (row.fields && row.fields.laborNote) || ''
+    laborNoteTouched.value = true
+    if (row.overrideTotal != null) {
+      useOverride.value = true
+      overrideTotal.value = String(row.overrideTotal)
+    } else {
+      useOverride.value = false
+      overrideTotal.value = ''
+    }
+    hint.value = `已复制 ${row.date} 的内容，日期仍为今天`
+  } catch (e) {
+    err.value = e.message
+  }
 }
 
 async function save() {
@@ -112,7 +164,7 @@ async function addExtra() {
     await api.addExtra(extraName.value, extraAmount.value)
     extraName.value = ''
     extraAmount.value = ''
-    alert('已加入零星')
+    hint.value = '已加入零星（账本级）'
   } catch (e) {
     err.value = e.message
   }
@@ -122,23 +174,44 @@ async function addExtra() {
 <template>
   <header class="topbar">
     <div>
-      <h2>{{ entryId ? '编辑明细' : '新建明细' }}</h2>
+      <h2>{{ entryId ? '编辑明细' : '记一笔' }}</h2>
+      <div class="muted">按纸面填一行，保存即计入合计</div>
     </div>
-    <div class="actions" style="grid-template-columns: 1fr">
+    <div class="actions actions-2">
       <button class="btn btn-ghost" type="button" @click="router.push(ledgerHomeRoute())">
-        返回账本
+        返回
+      </button>
+      <button
+        v-if="!entryId"
+        class="btn btn-ghost"
+        type="button"
+        @click="copyYesterday"
+      >
+        复制昨日
       </button>
     </div>
   </header>
   <p v-if="err" class="err">{{ err }}</p>
+  <p v-if="hint" class="hint-ok">{{ hint }}</p>
   <div class="card">
     <label>日期</label>
     <input v-model="date" type="date" />
     <template v-if="kind === 'mixed'">
       <label>渣土车数</label>
-      <input v-model="trucks" placeholder="如 2车 或 1车渣土1车泡沫" />
+      <div class="stepper">
+        <button class="btn btn-ghost step" type="button" @click="bumpTruck(-1)">−</button>
+        <input
+          v-model="trucks"
+          placeholder="如 2车 或 1车渣土1车泡沫"
+          style="margin: 0; flex: 1"
+        />
+        <button class="btn btn-ghost step" type="button" @click="bumpTruck(1)">＋</button>
+      </div>
+      <p v-if="truckStep != null" class="muted" style="margin: -4px 0 10px">
+        当前按 {{ truckStep }} 车计入（可改成文字说明）
+      </p>
     </template>
-    <label>工时分组</label>
+    <label>做卫生 · 工时分组</label>
     <div v-for="(g, idx) in groups" :key="idx" class="row" style="margin-bottom: 8px">
       <input
         v-model="g.people"
@@ -171,7 +244,7 @@ async function addExtra() {
       ＋ 再加一组
     </button>
     <p style="margin: 12px 0 0">
-      自动合计：<strong>{{ autoTotal }}</strong>
+      自动合计：<strong>{{ autoTotal }}</strong> 人天
     </p>
     <label class="row" style="margin-top: 12px">
       <input v-model="useOverride" type="checkbox" style="width: auto; min-height: auto" />
@@ -186,13 +259,13 @@ async function addExtra() {
     <label>做卫生人工记录 / 备注</label>
     <input
       v-model="laborNote"
-      placeholder="可自动生成"
+      placeholder="可自动生成，也可手写纸面原文"
       @input="laborNoteTouched = true"
     />
   </div>
   <div class="card">
     <h3>收成零星</h3>
-    <p class="muted" style="margin-top: -6px">固定金额，不计入人天</p>
+    <p class="muted" style="margin-top: -6px">固定金额，不计入人天（账本级）</p>
     <label>名称</label>
     <input v-model="extraName" placeholder="如 门口做卫生" />
     <label>金额</label>

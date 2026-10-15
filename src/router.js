@@ -7,6 +7,8 @@ import LaborLedgerView from './views/LaborLedgerView.vue'
 import EntryEditView from './views/EntryEditView.vue'
 import TemplatesView from './views/TemplatesView.vue'
 import TemplateEditView from './views/TemplateEditView.vue'
+import TodayView from './views/TodayView.vue'
+import MineView from './views/MineView.vue'
 
 const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
@@ -18,6 +20,12 @@ const router = createRouter({
       component: OpenLedgerView
     },
     {
+      path: '/today',
+      name: 'today',
+      component: TodayView,
+      meta: { auth: true }
+    },
+    {
       path: '/ledger/mixed',
       name: 'mixed',
       component: MixedSheetView,
@@ -27,6 +35,12 @@ const router = createRouter({
       path: '/ledger/labor',
       name: 'labor',
       component: LaborLedgerView,
+      meta: { auth: true }
+    },
+    {
+      path: '/mine',
+      name: 'mine',
+      component: MineView,
       meta: { auth: true }
     },
     {
@@ -61,7 +75,7 @@ export function ledgerHomeRoute() {
   const s = getSession()
   if (!s) return { name: 'home' }
   return s.settlement_kind === 'mixed'
-    ? { name: 'mixed' }
+    ? { name: 'today' }
     : { name: 'labor' }
 }
 

@@ -107,9 +107,9 @@ function logout() {
         {{ sessionInvite() || ledger?.invite_slug }}
       </div>
     </div>
-    <div class="actions" style="grid-template-columns: 1fr 1fr">
-      <button class="btn btn-ghost" type="button" @click="router.push({ name: 'templates' })">
-        模板
+    <div class="actions actions-2">
+      <button class="btn btn-ghost" type="button" @click="router.push({ name: 'mine' })">
+        我的
       </button>
       <button class="btn btn-ghost" type="button" @click="logout">退出</button>
     </div>
@@ -133,13 +133,13 @@ function logout() {
   </div>
 
   <button
-    class="btn btn-primary fab"
+    class="btn btn-primary fab with-tabbar"
     type="button"
     @click="router.push({ name: 'entry', query: { kind: 'labor' } })"
   >
     ＋ 新建一行
   </button>
-  <div class="fab-space" />
+  <div class="fab-space with-tabbar" />
 
   <section class="summary">
     <h3>结算汇总</h3>

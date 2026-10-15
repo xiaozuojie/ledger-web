@@ -85,7 +85,7 @@ async function copyLink(slug) {
 <template>
   <header class="page-hero">
     <h1>记账工时</h1>
-    <p class="lead">手机也能顺手记 · 开放账本，点进即用</p>
+    <p class="lead">今日记一笔 · 样表对账 · 开放链接即用</p>
   </header>
 
   <p v-if="status" class="card muted" style="margin-bottom: 12px">{{ status }}</p>
