@@ -3,6 +3,7 @@ import { onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { hasSupabase } from '../lib/supabase.js'
 import * as api from '../api/ledgerApi.js'
+import { dataMode } from '../api/ledgerApi.js'
 import { ledgerHomeRoute } from '../router.js'
 
 const router = useRouter()
@@ -17,10 +18,11 @@ const createForm = ref({
 })
 
 async function load() {
-  if (!hasSupabase) {
+  if (dataMode === 'local') {
     status.value =
-      '尚未配置 Supabase。复制 .env.example 为 .env 并填写后重启；同时执行 supabase/schema.sql（旧库再跑 patch-open-access.sql）。'
-    return
+      '当前为浏览器本地模式：本机可完整记账；换手机/清缓存会丢数据，也无法多人实时共用。若要联网共用，把 Supabase 的 URL 和 anon key 发给我即可升级。'
+  } else if (!hasSupabase) {
+    status.value = 'Supabase 未配置，已回退本地模式。'
   }
   try {
     const [tpl, list] = await Promise.all([
@@ -86,7 +88,7 @@ async function copyLink(slug) {
     <p class="lead">手机也能顺手记 · 开放账本，点进即用</p>
   </header>
 
-  <p v-if="status" class="err">{{ status }}</p>
+  <p v-if="status" class="card muted" style="margin-bottom: 12px">{{ status }}</p>
   <p v-if="err" class="err">{{ err }}</p>
 
   <section class="card">

@@ -21,3 +21,9 @@ export function getToken() {
   const s = getSession()
   return (s && s.session_token) || ''
 }
+
+/** 兼容 localApi 写入的会话字段 */
+export function getInviteSlug() {
+  const s = getSession()
+  return (s && s.invite_slug) || ''
+}
