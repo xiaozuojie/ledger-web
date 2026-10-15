@@ -20,6 +20,8 @@ const laborUnitPrice = ref('')
 const extraName = ref('')
 const extraAmount = ref('')
 const canvasRef = ref(null)
+const previewOpen = ref(false)
+const previewSrc = ref('')
 
 const result = computed(() =>
   computeLabor({
@@ -90,7 +92,8 @@ function shareImage() {
     [`工日 ${r.workDays} × ${r.unitPrice} = ${r.laborFee}`, `零星 ${r.extrasSum}`],
     r.total
   )
-  downloadCanvasPng(canvasRef.value, 'settlement.png')
+  previewSrc.value = canvasToDataUrl(canvasRef.value)
+  previewOpen.value = true
 }
 
 function logout() {
@@ -181,4 +184,10 @@ function logout() {
     <button class="btn btn-ghost" type="button" @click="shareImage">结算图</button>
   </div>
   <canvas ref="canvasRef" style="display: none" />
+  <SettlementPreview
+    :open="previewOpen"
+    :src="previewSrc"
+    :title="ledger?.name || '结算图'"
+    @close="previewOpen = false"
+  />
 </template>
