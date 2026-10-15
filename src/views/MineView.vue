@@ -6,7 +6,7 @@ import { clearSession, getSession } from '../lib/session.js'
 import { rowWorkDays } from '../calc/hours.js'
 import { computeMixed } from '../calc/settlement.js'
 import { downloadHtmlXls } from '../utils/exportXls.js'
-import { paintSettlementImage, canvasToDataUrl } from '../utils/shareImage.js'
+import { paintMixedSettlementSheet, canvasToDataUrl } from '../utils/shareImage.js'
 import SettlementPreview from '../components/SettlementPreview.vue'
 
 const router = useRouter()
@@ -117,17 +117,25 @@ function exportXls() {
 
 function shareImage() {
   const r = result.value
-  const lines = [
-    `渣土车费 ${r.truckCount} 车 × ${r.truckUnitPrice} = ${r.truckFee}`,
-    `做卫生人工费 ${r.workDays} 人天 × ${r.laborUnitPrice} = ${r.laborFee}`,
-    ...extras.value.map((x) => `${x.name} = ${x.amount}`)
-  ]
-  paintSettlementImage(
-    canvasRef.value,
-    ledger.value?.name || '综合记账',
-    lines,
-    r.total
-  )
+  paintMixedSettlementSheet(canvasRef.value, {
+    title: `${ledger.value?.name || '车 / 做卫生'} 记账明细`,
+    rows: rows.value.map((row) => ({
+      date: row.date,
+      trucks: row.trucks,
+      laborNote: row.laborNote,
+      workDays: row.workDays
+    })),
+    result: {
+      truckCount: r.truckCount,
+      truckUnitPrice: r.truckUnitPrice,
+      truckFee: r.truckFee,
+      workDays: r.workDays,
+      laborUnitPrice: r.laborUnitPrice,
+      laborFee: r.laborFee,
+      extras: extras.value,
+      total: r.total
+    }
+  })
   previewSrc.value = canvasToDataUrl(canvasRef.value)
   previewOpen.value = true
 }

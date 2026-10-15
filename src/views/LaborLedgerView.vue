@@ -8,7 +8,7 @@ const sessionInvite = () => getSession()?.invite_slug
 import { rowWorkDays } from '../calc/hours.js'
 import { computeLabor } from '../calc/settlement.js'
 import { downloadHtmlXls } from '../utils/exportXls.js'
-import { paintSettlementImage, canvasToDataUrl } from '../utils/shareImage.js'
+import { paintLaborSettlementSheet, canvasToDataUrl } from '../utils/shareImage.js'
 import SettlementPreview from '../components/SettlementPreview.vue'
 
 const router = useRouter()
@@ -86,12 +86,26 @@ function exportXls() {
 
 function shareImage() {
   const r = result.value
-  paintSettlementImage(
-    canvasRef.value,
-    ledger.value?.name || '工时',
-    [`工日 ${r.workDays} × ${r.unitPrice} = ${r.laborFee}`, `零星 ${r.extrasSum}`],
-    r.total
-  )
+  paintLaborSettlementSheet(canvasRef.value, {
+    title: `${ledger.value?.name || '工时'} 记账明细`,
+    rows: entries.value.map((e) => {
+      const g = e.groups || []
+      return {
+        date: e.date,
+        peopleText: g.map((x) => x.people).join('+'),
+        daysText: g.map((x) => x.days).join('+'),
+        workDays: rowWorkDays(e),
+        laborNote: e.summary || ''
+      }
+    }),
+    result: {
+      workDays: r.workDays,
+      unitPrice: r.unitPrice,
+      laborFee: r.laborFee,
+      extras: extras.value,
+      total: r.total
+    }
+  })
   previewSrc.value = canvasToDataUrl(canvasRef.value)
   previewOpen.value = true
 }
