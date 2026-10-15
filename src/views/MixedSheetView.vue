@@ -1,0 +1,260 @@
+<script setup>
+import { computed, onMounted, ref } from 'vue'
+import { useRouter } from 'vue-router'
+import * as api from '../api/ledgerApi.js'
+import { getSession, clearSession } from '../lib/session.js'
+import { rowWorkDays } from '../calc/hours.js'
+import { computeMixed } from '../calc/settlement.js'
+import { downloadHtmlXls } from '../utils/exportXls.js'
+import { paintSettlementImage, downloadCanvasPng } from '../utils/shareImage.js'
+
+const sessionInvite = () => getSession()?.invite_slug
+
+const router = useRouter()
+const ledger = ref(null)
+const entries = ref([])
+const extras = ref([])
+const err = ref('')
+const truckUnitPrice = ref('')
+const laborUnitPrice = ref('')
+const extraName = ref('')
+const extraAmount = ref('')
+const canvasRef = ref(null)
+
+const rows = computed(() =>
+  entries.value.map((e) => ({
+    id: e.id,
+    date: e.date,
+    trucks: (e.fields && e.fields.trucks) || '',
+    laborNote: (e.fields && e.fields.laborNote) || e.summary || '',
+    workDays: rowWorkDays(e)
+  }))
+)
+
+const result = computed(() =>
+  computeMixed({
+    entries: entries.value,
+    rates: {
+      truckUnitPrice: Number(truckUnitPrice.value) || 0,
+      laborUnitPrice: Number(laborUnitPrice.value) || 0
+    },
+    extras: extras.value
+  })
+)
+
+async function refresh() {
+  err.value = ''
+  try {
+    ledger.value = await api.getLedger()
+    entries.value = await api.listEntries()
+    extras.value = await api.listExtras()
+    truckUnitPrice.value = String(ledger.value.rates?.truckUnitPrice ?? 100)
+    laborUnitPrice.value = String(ledger.value.rates?.laborUnitPrice ?? 230)
+  } catch (e) {
+    err.value = e.message
+  }
+}
+
+onMounted(refresh)
+
+function addEntry() {
+  router.push({ name: 'entry', query: { kind: 'mixed' } })
+}
+function editEntry(id) {
+  router.push({ name: 'entry', query: { kind: 'mixed', id } })
+}
+
+async function saveRates() {
+  try {
+    await api.updateRates({
+      truckUnitPrice: Number(truckUnitPrice.value) || 0,
+      laborUnitPrice: Number(laborUnitPrice.value) || 0
+    })
+    await refresh()
+  } catch (e) {
+    err.value = e.message
+  }
+}
+
+async function addExtra() {
+  try {
+    await api.addExtra(extraName.value, extraAmount.value)
+    extraName.value = ''
+    extraAmount.value = ''
+    await refresh()
+  } catch (e) {
+    err.value = e.message
+  }
+}
+
+async function removeExtra(id) {
+  try {
+    await api.removeExtra(id)
+    await refresh()
+  } catch (e) {
+    err.value = e.message
+  }
+}
+
+function exportXls() {
+  const r = result.value
+  const table = [['日期', '渣土车数', '做卫生人工记录', '折合人天']]
+  rows.value.forEach((row) => {
+    table.push([row.date, row.trucks, row.laborNote, row.workDays])
+  })
+  table.push([])
+  table.push([
+    '渣土车费',
+    `${r.truckCount} 车 × ${r.truckUnitPrice} 元/车 = ${r.truckFee}`
+  ])
+  table.push([
+    '做卫生人工费',
+    `${r.workDays} 人天 × ${r.laborUnitPrice} 元/人天 = ${r.laborFee}`
+  ])
+  extras.value.forEach((x) => table.push([x.name, x.amount]))
+  table.push(['总计', r.total])
+  downloadHtmlXls(table, (ledger.value && ledger.value.name) || '结算')
+}
+
+function shareImage() {
+  const r = result.value
+  const lines = [
+    `渣土车费 ${r.truckCount} 车 × ${r.truckUnitPrice} = ${r.truckFee}`,
+    `做卫生人工费 ${r.workDays} 人天 × ${r.laborUnitPrice} = ${r.laborFee}`,
+    ...extras.value.map((x) => `${x.name} = ${x.amount}`)
+  ]
+  paintSettlementImage(
+    canvasRef.value,
+    ledger.value?.name || '综合记账',
+    lines,
+    r.total
+  )
+  downloadCanvasPng(canvasRef.value, 'settlement.png')
+}
+
+function logout() {
+  clearSession()
+  router.push({ name: 'home' })
+}
+
+function copyShareLink() {
+  const slug = sessionInvite() || ledger.value?.invite_slug
+  if (!slug) return
+  const base = `${window.location.origin}${import.meta.env.BASE_URL}`.replace(
+    /\/?$/,
+    '/'
+  )
+  const url = `${base}l/${slug}`
+  navigator.clipboard?.writeText(url).then(
+    () => alert('分享链接已复制（无需口令）'),
+    () => prompt('复制链接', url)
+  )
+}
+</script>
+
+<template>
+  <header class="topbar">
+    <div>
+      <h2>{{ ledger?.name || '综合记账' }}</h2>
+      <div class="muted">
+        <span class="chip">综合</span>
+        {{ result.entryCount }} 行明细
+      </div>
+    </div>
+    <div class="actions">
+      <button class="btn btn-ghost" type="button" @click="copyShareLink">分享</button>
+      <button class="btn btn-ghost" type="button" @click="router.push({ name: 'templates' })">
+        模板
+      </button>
+      <button class="btn btn-ghost" type="button" @click="logout">退出</button>
+    </div>
+  </header>
+
+  <p v-if="err" class="err">{{ err }}</p>
+
+  <!-- 手机：卡片列表 -->
+  <div class="entry-list">
+    <div
+      v-for="row in rows"
+      :key="row.id"
+      class="entry-card"
+      @click="editEntry(row.id)"
+    >
+      <div class="head">
+        <span class="date">{{ row.date }}</span>
+        <span class="days">{{ row.workDays }} 人天</span>
+      </div>
+      <div class="meta" v-if="row.trucks">车次：{{ row.trucks }}</div>
+      <div class="meta">{{ row.laborNote || '（无人工说明）' }}</div>
+    </div>
+    <div v-if="!rows.length" class="card empty">暂无明细，点下方新建</div>
+  </div>
+
+  <!-- 宽屏：表格 -->
+  <div class="table-wrap card" style="padding: 0">
+    <table class="sheet">
+      <thead>
+        <tr>
+          <th>日期</th>
+          <th>渣土车数</th>
+          <th>做卫生人工记录</th>
+          <th>折合人天</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr
+          v-for="row in rows"
+          :key="'t-' + row.id"
+          style="cursor: pointer"
+          @click="editEntry(row.id)"
+        >
+          <td>{{ row.date }}</td>
+          <td>{{ row.trucks }}</td>
+          <td>{{ row.laborNote }}</td>
+          <td>{{ row.workDays }}</td>
+        </tr>
+        <tr v-if="!rows.length">
+          <td colspan="4" class="muted">暂无明细</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <button class="btn btn-primary fab" type="button" @click="addEntry">＋ 新建一行</button>
+  <div class="fab-space" />
+
+  <section class="summary">
+    <h3>结算汇总</h3>
+    <div class="sum-line">
+      车费 {{ result.truckCount }} 车 ×
+      <input v-model="truckUnitPrice" class="price" type="number" inputmode="decimal" />
+      =
+      <strong>{{ result.truckFee }}</strong>
+    </div>
+    <div class="sum-line">
+      人工 {{ result.workDays }} 人天 ×
+      <input v-model="laborUnitPrice" class="price" type="number" inputmode="decimal" />
+      =
+      <strong>{{ result.laborFee }}</strong>
+    </div>
+    <div v-for="x in extras" :key="x.id" class="extra-row">
+      <span>{{ x.name }} = {{ x.amount }}</span>
+      <button class="linkish" type="button" @click="removeExtra(x.id)">删除</button>
+    </div>
+    <label>零星名称</label>
+    <input v-model="extraName" placeholder="如 门口做卫生" />
+    <label>金额</label>
+    <input v-model="extraAmount" type="number" inputmode="decimal" placeholder="0" />
+    <div class="btn-row" style="margin-bottom: 8px">
+      <button class="btn btn-ghost" type="button" @click="addExtra">添加零星</button>
+      <button class="btn btn-primary" type="button" @click="saveRates">保存单价</button>
+    </div>
+    <div class="total">总计 {{ result.total }} 元</div>
+  </section>
+
+  <div class="card btn-row" style="margin-top: 14px">
+    <button class="btn btn-primary" type="button" @click="exportXls">导出表格</button>
+    <button class="btn btn-ghost" type="button" @click="shareImage">结算图</button>
+  </div>
+  <canvas ref="canvasRef" style="display: none" />
+</template>
