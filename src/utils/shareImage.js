@@ -165,6 +165,20 @@ function measureSummaryHeight(ctx, colW, feeRows) {
   return h
 }
 
+/** 汇总区竖线：合并前两列，只在「标签|公式」「公式|金额」处画线 */
+function drawSummaryVLines(ctx, x0, y, h, labelW, formulaW) {
+  ctx.strokeStyle = COLORS.border
+  ctx.lineWidth = 1
+  const x1 = x0 + labelW
+  const x2 = x1 + formulaW
+  ;[x1, x2].forEach((x) => {
+    ctx.beginPath()
+    ctx.moveTo(x + 0.5, y)
+    ctx.lineTo(x + 0.5, y + h)
+    ctx.stroke()
+  })
+}
+
 function paintSummarySection(ctx, x0, y, colW, tableW, feeRows, total) {
   const summaryHeadH = 44
   const totalH = 56
@@ -175,6 +189,7 @@ function paintSummarySection(ctx, x0, y, colW, tableW, feeRows, total) {
   const fontTotalLabel = 'bold 22px "PingFang SC","Microsoft YaHei",sans-serif'
   const fontTotalAmt = 'bold 24px "PingFang SC","Microsoft YaHei",sans-serif'
 
+  // 横向合并明细前两列（日期+渣土车数）作为项目名
   const labelW = colW[0] + colW[1]
   const formulaW = colW[2]
   const amountW = colW[3]
@@ -202,7 +217,7 @@ function paintSummarySection(ctx, x0, y, colW, tableW, feeRows, total) {
     ctx.fillRect(x0, y, tableW, feeRowH)
     ctx.strokeStyle = COLORS.border
     ctx.strokeRect(x0 + 0.5, y + 0.5, tableW - 1, feeRowH - 1)
-    drawVLines(ctx, x0, y, feeRowH, colW)
+    drawSummaryVLines(ctx, x0, y, feeRowH, labelW, formulaW)
 
     drawCellText(ctx, fee.label, x0, y, labelW, feeRowH, {
       font: fontLabel,
@@ -232,7 +247,8 @@ function paintSummarySection(ctx, x0, y, colW, tableW, feeRows, total) {
   ctx.fillRect(x0, y, tableW, totalH)
   ctx.strokeStyle = COLORS.border
   ctx.strokeRect(x0 + 0.5, y + 0.5, tableW - 1, totalH - 1)
-  drawVLines(ctx, x0, y, totalH, colW)
+  drawSummaryVLines(ctx, x0, y, totalH, labelW, formulaW)
+  // 前两列合并留白；「总计」在公式列右对齐
   drawCellText(ctx, '总计', formulaX, y, formulaW, totalH, {
     font: fontTotalLabel,
     align: 'right',
