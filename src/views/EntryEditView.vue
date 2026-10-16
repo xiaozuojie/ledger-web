@@ -118,13 +118,25 @@ async function copyYesterday() {
   }
 }
 
+const saving = ref(false)
+
+function resolveOverride() {
+  if (!useOverride.value) return null
+  const raw = String(overrideTotal.value ?? '').trim()
+  if (raw === '') return null
+  const n = Number(raw)
+  return Number.isFinite(n) ? n : null
+}
+
 async function save() {
+  if (saving.value) return
   err.value = ''
   const mapped = groups.value.map((g) => ({
     people: Number(g.people) || 0,
     days: Number(g.days) || 0
   }))
-  const workDays = useOverride.value ? Number(overrideTotal.value) || 0 : autoTotal.value
+  const override = resolveOverride()
+  const workDays = override != null ? override : autoTotal.value
   let note = laborNote.value
   if (!laborNoteTouched.value) {
     note = buildLaborNote(mapped, workDays) || note
@@ -133,18 +145,21 @@ async function save() {
     kind.value === 'mixed'
       ? { trucks: trucks.value, laborNote: note }
       : { laborNote: note }
+  saving.value = true
   try {
     await api.upsertEntry({
       id: entryId.value || null,
       date: date.value,
       groups: mapped,
-      overrideTotal: useOverride.value ? Number(overrideTotal.value) : null,
+      overrideTotal: override,
       fields,
       summary: note
     })
     router.push(ledgerHomeRoute())
   } catch (e) {
     err.value = e.message
+  } finally {
+    saving.value = false
   }
 }
 

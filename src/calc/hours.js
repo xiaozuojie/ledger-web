@@ -1,7 +1,4 @@
-export function rowWorkDays(entry) {
-  if (entry && entry.overrideTotal != null && entry.overrideTotal !== '') {
-    return Number(entry.overrideTotal)
-  }
+function groupsWorkDays(entry) {
   const groups = (entry && entry.groups) || []
   if (!groups.length) return 0
   return groups.reduce((sum, g) => {
@@ -9,6 +6,20 @@ export function rowWorkDays(entry) {
     const days = Number(g.days) || 0
     return sum + people * days
   }, 0)
+}
+
+/**
+ * 折合工日/人天。手改优先；若手改为 0 但分组算出 >0，视为脏数据回退分组
+ *（常见于勾了「手工改合计」却未填数字，Number('')===0）
+ */
+export function rowWorkDays(entry) {
+  const fromGroups = groupsWorkDays(entry)
+  const raw = entry && entry.overrideTotal
+  if (raw == null || raw === '') return fromGroups
+  const o = Number(raw)
+  if (!Number.isFinite(o)) return fromGroups
+  if (o === 0 && fromGroups > 0) return fromGroups
+  return o
 }
 
 export function sumWorkDays(entries) {
