@@ -112,6 +112,116 @@ function measureRowHeight(ctx, cells, widths, font, minH = 48) {
   return Math.max(minH, maxLines * 26 + 16)
 }
 
+function colOffset(colW, index) {
+  let x = 0
+  for (let i = 0; i < index; i++) x += colW[i]
+  return x
+}
+
+function drawVLines(ctx, x0, y, h, colW) {
+  ctx.strokeStyle = COLORS.border
+  ctx.lineWidth = 1
+  let x = x0
+  for (let i = 0; i < colW.length - 1; i++) {
+    x += colW[i]
+    ctx.beginPath()
+    ctx.moveTo(x + 0.5, y)
+    ctx.lineTo(x + 0.5, y + h)
+    ctx.stroke()
+  }
+}
+
+/**
+ * 结算汇总区：与明细四列对齐
+ * | 标签(日期+车次并) | 公式(人工记录列) | 金额(人天列) |
+ * 总计行：前三列空，「总计」靠右贴金额列，金额列加粗
+ */
+function paintSummarySection(ctx, x0, y, colW, tableW, feeRows, total) {
+  const summaryHeadH = 44
+  const feeRowH = 52
+  const totalH = 56
+  const fontLabel = '22px "PingFang SC","Microsoft YaHei",sans-serif'
+  const fontFormula = '22px "PingFang SC","Microsoft YaHei",sans-serif'
+  const fontAmount = 'bold 22px "PingFang SC","Microsoft YaHei",sans-serif'
+  const fontSumHead = 'bold 23px "PingFang SC","Microsoft YaHei",sans-serif'
+  const fontTotalLabel = 'bold 24px "PingFang SC","Microsoft YaHei",sans-serif'
+  const fontTotalAmt = 'bold 26px "PingFang SC","Microsoft YaHei",sans-serif'
+
+  const labelW = colW[0] + colW[1]
+  const formulaW = colW[2]
+  const amountW = colW[3]
+  const formulaX = x0 + labelW
+  const amountX = formulaX + formulaW
+
+  // —— 汇总标题（左对齐，更像 Excel）——
+  ctx.fillStyle = COLORS.summaryBg
+  ctx.fillRect(x0, y, tableW, summaryHeadH)
+  ctx.strokeStyle = COLORS.border
+  ctx.strokeRect(x0 + 0.5, y + 0.5, tableW - 1, summaryHeadH - 1)
+  drawCellText(ctx, '结算汇总', x0, y, tableW, summaryHeadH, {
+    font: fontSumHead,
+    align: 'left',
+    color: COLORS.title,
+    pad: 14
+  })
+  y += summaryHeadH
+
+  // —— 费用行 ——
+  feeRows.forEach((fee) => {
+    ctx.fillStyle = COLORS.card
+    ctx.fillRect(x0, y, tableW, feeRowH)
+    ctx.strokeStyle = COLORS.border
+    ctx.strokeRect(x0 + 0.5, y + 0.5, tableW - 1, feeRowH - 1)
+    // 竖线：在明细列边界（车次|人工、人工|人天）
+    drawVLines(ctx, x0, y, feeRowH, colW)
+    // 标签跨前两列
+    drawCellText(ctx, fee.label, x0, y, labelW, feeRowH, {
+      font: fontLabel,
+      align: 'left',
+      pad: 14,
+      color: COLORS.text
+    })
+    drawCellText(ctx, fee.formula || '', formulaX, y, formulaW, feeRowH, {
+      font: fontFormula,
+      align: 'left',
+      pad: 12,
+      color: COLORS.muted
+    })
+    drawCellText(ctx, fee.amount, amountX, y, amountW, feeRowH, {
+      font: fontAmount,
+      align: 'right',
+      pad: 14,
+      color: COLORS.title
+    })
+    y += feeRowH
+  })
+
+  // —— 总计行：黄底；「总计」在公式列右对齐，金额在人天列 ——
+  ctx.fillStyle = COLORS.totalBg
+  ctx.fillRect(x0, y, tableW, totalH)
+  ctx.strokeStyle = COLORS.border
+  ctx.strokeRect(x0 + 0.5, y + 0.5, tableW - 1, totalH - 1)
+  drawVLines(ctx, x0, y, totalH, colW)
+  drawCellText(ctx, '总计', formulaX, y, formulaW, totalH, {
+    font: fontTotalLabel,
+    align: 'right',
+    pad: 12,
+    color: COLORS.title
+  })
+  drawCellText(ctx, money(total), amountX, y, amountW, totalH, {
+    font: fontTotalAmt,
+    align: 'right',
+    pad: 14,
+    color: COLORS.title
+  })
+
+  return y + totalH
+}
+
+export function summaryBlockHeight(feeCount) {
+  return 44 + feeCount * 52 + 56
+}
+
 /**
  * 综合样表结算图（对齐 Excel：四列明细 + 结算汇总）
  * @param {HTMLCanvasElement} canvas
@@ -164,37 +274,28 @@ export function paintMixedSettlementSheet(canvas, payload) {
   const emptyRows = rows.length === 0 ? 2 : 1
   for (let i = 0; i < emptyRows; i++) dataHeights.push(minRowH)
 
-  const feeRows = []
-  if (Number(r.truckCount) > 0 || Number(r.truckFee) > 0) {
-    feeRows.push({
+  const feeRows = [
+    {
       label: '渣土车费',
-      formula: `${r.truckCount} 车 × ${r.truckUnitPrice} 元/车`,
+      formula: `${r.truckCount ?? 0} 车 × ${r.truckUnitPrice ?? 0} 元/车`,
       amount: money(r.truckFee)
-    })
-  }
-  feeRows.push({
-    label: '做卫生人工费',
-    formula: `${r.workDays} 人天 × ${r.laborUnitPrice} 元/人天`,
-    amount: money(r.laborFee)
-  })
-  extras.forEach((x) => {
-    feeRows.push({
+    },
+    {
+      label: '做卫生人工费',
+      formula: `${r.workDays ?? 0} 人天 × ${r.laborUnitPrice ?? 0} 元/人天`,
+      amount: money(r.laborFee)
+    },
+    ...extras.map((x) => ({
       label: x.name || '零星',
       formula: '',
       amount: money(x.amount)
-    })
-  })
+    }))
+  ]
 
-  const summaryHeadH = 48
-  const feeRowH = 48
-  const totalH = 56
   const titleBlock = 52
+  const sumH = summaryBlockHeight(feeRows.length)
   const tableH =
-    headerH +
-    dataHeights.reduce((s, h) => s + h, 0) +
-    summaryHeadH +
-    feeRows.length * feeRowH +
-    totalH
+    headerH + dataHeights.reduce((s, h) => s + h, 0) + sumH
 
   const w = tableW + pad * 2
   const h = titleBlock + tableH + pad * 2 + 8
@@ -232,17 +333,7 @@ export function paintMixedSettlementSheet(canvas, payload) {
     })
     cx += colW[i]
   })
-  // 表头竖线
-  ctx.strokeStyle = COLORS.border
-  ctx.lineWidth = 1
-  cx = x0
-  for (let i = 0; i < colW.length - 1; i++) {
-    cx += colW[i]
-    ctx.beginPath()
-    ctx.moveTo(cx, y)
-    ctx.lineTo(cx, y + headerH)
-    ctx.stroke()
-  }
+  drawVLines(ctx, x0, y, headerH, colW)
   y += headerH
 
   // 数据行（含空行）
@@ -263,73 +354,22 @@ export function paintMixedSettlementSheet(canvas, payload) {
     ctx.fillStyle = COLORS.card
     ctx.fillRect(x0, y, tableW, rh)
     ctx.strokeStyle = COLORS.border
-    ctx.strokeRect(x0, y, tableW, rh)
+    ctx.strokeRect(x0 + 0.5, y + 0.5, tableW - 1, rh - 1)
+    drawVLines(ctx, x0, y, rh, colW)
     let xx = x0
     for (let i = 0; i < 4; i++) {
-      if (i > 0) {
-        ctx.beginPath()
-        ctx.moveTo(xx, y)
-        ctx.lineTo(xx, y + rh)
-        ctx.stroke()
-      }
       drawCellText(ctx, cells[i], xx, y, colW[i], rh, {
         font: fontCell,
-        align: i === 2 ? 'left' : 'center',
-        color: COLORS.text
+        align: i === 2 ? 'left' : i === 3 ? 'right' : 'center',
+        color: COLORS.text,
+        pad: i === 2 || i === 3 ? 12 : 8
       })
       xx += colW[i]
     }
     y += rh
   })
 
-  // 结算汇总标题
-  ctx.fillStyle = COLORS.summaryBg
-  ctx.fillRect(x0, y, tableW, summaryHeadH)
-  ctx.strokeStyle = COLORS.border
-  ctx.strokeRect(x0, y, tableW, summaryHeadH)
-  drawCellText(ctx, '结算汇总', x0, y, tableW, summaryHeadH, {
-    font: 'bold 24px "PingFang SC","Microsoft YaHei",sans-serif',
-    color: COLORS.text
-  })
-  y += summaryHeadH
-
-  // 费用行：左标签 | 中公式 | 右金额
-  const feeCols = [160, 400, 160]
-  feeRows.forEach((fee) => {
-    ctx.fillStyle = COLORS.card
-    ctx.fillRect(x0, y, tableW, feeRowH)
-    ctx.strokeStyle = COLORS.border
-    ctx.strokeRect(x0, y, tableW, feeRowH)
-    let xx = x0
-    const texts = [fee.label, fee.formula, fee.amount]
-    const aligns = ['center', 'center', 'right']
-    feeCols.forEach((fw, i) => {
-      if (i > 0) {
-        ctx.beginPath()
-        ctx.moveTo(xx, y)
-        ctx.lineTo(xx, y + feeRowH)
-        ctx.stroke()
-      }
-      drawCellText(ctx, texts[i], xx, y, fw, feeRowH, {
-        font: fontCell,
-        align: aligns[i],
-        color: COLORS.text
-      })
-      xx += fw
-    })
-    y += feeRowH
-  })
-
-  // 总计行
-  ctx.fillStyle = COLORS.totalBg
-  ctx.fillRect(x0, y, tableW, totalH)
-  ctx.strokeStyle = COLORS.border
-  ctx.strokeRect(x0, y, tableW, totalH)
-  drawCellText(ctx, `总计  ${money(r.total)}`, x0, y, tableW, totalH, {
-    font: 'bold 28px "PingFang SC","Microsoft YaHei",sans-serif',
-    align: 'right',
-    color: COLORS.title
-  })
+  paintSummarySection(ctx, x0, y, colW, tableW, feeRows, r.total)
 }
 
 /**
@@ -405,16 +445,10 @@ function paintLaborTable(canvas, _mapped, rows, r, extras, title) {
     }))
   ]
 
-  const summaryHeadH = 48
-  const feeRowH = 48
-  const totalH = 56
   const titleBlock = 52
+  const sumH = summaryBlockHeight(feeRows.length)
   const tableH =
-    headerH +
-    dataHeights.reduce((s, h) => s + h, 0) +
-    summaryHeadH +
-    feeRows.length * feeRowH +
-    totalH
+    headerH + dataHeights.reduce((s, h) => s + h, 0) + sumH
 
   const w = tableW + pad * 2
   const h = titleBlock + tableH + pad * 2 + 8
@@ -439,12 +473,13 @@ function paintLaborTable(canvas, _mapped, rows, r, extras, title) {
   ctx.fillStyle = COLORS.headerBg
   ctx.fillRect(x0, y, tableW, headerH)
   ;['日期', '人数', '天数', '折合工日'].forEach((label, i) => {
-    let xx = x0 + colW.slice(0, i).reduce((s, n) => s + n, 0)
+    const xx = x0 + colOffset(colW, i)
     drawCellText(ctx, label, xx, y, colW[i], headerH, {
       color: COLORS.headerText,
       font: fontHead
     })
   })
+  drawVLines(ctx, x0, y, headerH, colW)
   y += headerH
 
   const allCells = [
@@ -461,58 +496,21 @@ function paintLaborTable(canvas, _mapped, rows, r, extras, title) {
     ctx.fillStyle = COLORS.card
     ctx.fillRect(x0, y, tableW, rh)
     ctx.strokeStyle = COLORS.border
-    ctx.strokeRect(x0, y, tableW, rh)
+    ctx.strokeRect(x0 + 0.5, y + 0.5, tableW - 1, rh - 1)
+    drawVLines(ctx, x0, y, rh, colW)
     let xx = x0
     cells.forEach((t, i) => {
-      if (i > 0) {
-        ctx.beginPath()
-        ctx.moveTo(xx, y)
-        ctx.lineTo(xx, y + rh)
-        ctx.stroke()
-      }
-      drawCellText(ctx, t, xx, y, colW[i], rh, { font: fontCell })
+      drawCellText(ctx, t, xx, y, colW[i], rh, {
+        font: fontCell,
+        align: i === 3 ? 'right' : 'center',
+        pad: i === 3 ? 12 : 8
+      })
       xx += colW[i]
     })
     y += rh
   })
 
-  ctx.fillStyle = COLORS.summaryBg
-  ctx.fillRect(x0, y, tableW, summaryHeadH)
-  ctx.strokeRect(x0, y, tableW, summaryHeadH)
-  drawCellText(ctx, '结算汇总', x0, y, tableW, summaryHeadH, {
-    font: 'bold 24px "PingFang SC","Microsoft YaHei",sans-serif'
-  })
-  y += summaryHeadH
-
-  const feeCols = [160, 400, 160]
-  feeRows.forEach((fee) => {
-    ctx.fillStyle = COLORS.card
-    ctx.fillRect(x0, y, tableW, feeRowH)
-    ctx.strokeRect(x0, y, tableW, feeRowH)
-    let xx = x0
-    ;[fee.label, fee.formula, fee.amount].forEach((t, i) => {
-      if (i > 0) {
-        ctx.beginPath()
-        ctx.moveTo(xx, y)
-        ctx.lineTo(xx, y + feeRowH)
-        ctx.stroke()
-      }
-      drawCellText(ctx, t, xx, y, feeCols[i], feeRowH, {
-        font: fontCell,
-        align: i === 2 ? 'right' : 'center'
-      })
-      xx += feeCols[i]
-    })
-    y += feeRowH
-  })
-
-  ctx.fillStyle = COLORS.totalBg
-  ctx.fillRect(x0, y, tableW, totalH)
-  ctx.strokeRect(x0, y, tableW, totalH)
-  drawCellText(ctx, `总计  ${money(r.total)}`, x0, y, tableW, totalH, {
-    font: 'bold 28px "PingFang SC","Microsoft YaHei",sans-serif',
-    align: 'right'
-  })
+  paintSummarySection(ctx, x0, y, colW, tableW, feeRows, r.total)
 }
 
 /** @deprecated 旧版蓝头清单；请改用 paintMixedSettlementSheet */
