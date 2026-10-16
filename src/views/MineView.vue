@@ -102,10 +102,12 @@ function exportXls() {
     table.push([row.date, row.trucks, row.laborNote, row.workDays])
   })
   table.push([])
-  table.push([
-    '渣土车费',
-    `${r.truckCount} 车 × ${r.truckUnitPrice} 元/车 = ${r.truckFee}`
-  ])
+  if (Number(r.truckCount) > 0) {
+    table.push([
+      '渣土车费',
+      `${r.truckCount} 车 × ${r.truckUnitPrice} 元/车 = ${r.truckFee}`
+    ])
+  }
   table.push([
     '做卫生人工费',
     `${r.workDays} 人天 × ${r.laborUnitPrice} 元/人天 = ${r.laborFee}`

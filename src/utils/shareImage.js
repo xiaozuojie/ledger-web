@@ -75,12 +75,20 @@ function drawCellText(ctx, text, x, y, w, h, opts = {}) {
     color = COLORS.text,
     font = '22px sans-serif',
     pad = 8,
-    valign = 'middle'
+    valign = 'middle',
+    lineH = 24,
+    clip = true
   } = opts
+  ctx.save()
+  if (clip) {
+    ctx.beginPath()
+    ctx.rect(x + 1, y + 1, Math.max(0, w - 2), Math.max(0, h - 2))
+    ctx.clip()
+  }
   ctx.fillStyle = color
   ctx.font = font
-  const lines = wrapLines(ctx, text, w - pad * 2)
-  const lineH = 26
+  const maxW = Math.max(8, w - pad * 2)
+  const lines = wrapLines(ctx, text, maxW)
   const blockH = lines.length * lineH
   let ty =
     valign === 'top'
@@ -100,6 +108,13 @@ function drawCellText(ctx, text, x, y, w, h, opts = {}) {
     ty += lineH
   }
   ctx.textAlign = 'left'
+  ctx.restore()
+}
+
+function cellLinesHeight(ctx, text, width, font, pad = 10, lineH = 24, minH = 48) {
+  ctx.font = font
+  const lines = wrapLines(ctx, text, Math.max(8, width - pad * 2))
+  return Math.max(minH, lines.length * lineH + pad * 2)
 }
 
 function measureRowHeight(ctx, cells, widths, font, minH = 48) {
@@ -134,18 +149,31 @@ function drawVLines(ctx, x0, y, h, colW) {
 /**
  * 结算汇总区：与明细四列对齐
  * | 标签(日期+车次并) | 公式(人工记录列) | 金额(人天列) |
- * 总计行：前三列空，「总计」靠右贴金额列，金额列加粗
+ * 行高按换行自适应，文字裁切在格内
  */
+function measureSummaryHeight(ctx, colW, feeRows) {
+  const fontLabel = '20px "PingFang SC","Microsoft YaHei",sans-serif'
+  const fontFormula = '20px "PingFang SC","Microsoft YaHei",sans-serif'
+  const labelW = colW[0] + colW[1]
+  const formulaW = colW[2]
+  let h = 44 + 56
+  feeRows.forEach((fee) => {
+    const lh = cellLinesHeight(ctx, fee.label, labelW, fontLabel, 10, 24, 48)
+    const fh = cellLinesHeight(ctx, fee.formula || '', formulaW, fontFormula, 10, 24, 48)
+    h += Math.max(lh, fh, 48)
+  })
+  return h
+}
+
 function paintSummarySection(ctx, x0, y, colW, tableW, feeRows, total) {
   const summaryHeadH = 44
-  const feeRowH = 52
   const totalH = 56
-  const fontLabel = '22px "PingFang SC","Microsoft YaHei",sans-serif'
-  const fontFormula = '22px "PingFang SC","Microsoft YaHei",sans-serif'
-  const fontAmount = 'bold 22px "PingFang SC","Microsoft YaHei",sans-serif'
-  const fontSumHead = 'bold 23px "PingFang SC","Microsoft YaHei",sans-serif'
-  const fontTotalLabel = 'bold 24px "PingFang SC","Microsoft YaHei",sans-serif'
-  const fontTotalAmt = 'bold 26px "PingFang SC","Microsoft YaHei",sans-serif'
+  const fontLabel = '20px "PingFang SC","Microsoft YaHei",sans-serif'
+  const fontFormula = '20px "PingFang SC","Microsoft YaHei",sans-serif'
+  const fontAmount = 'bold 20px "PingFang SC","Microsoft YaHei",sans-serif'
+  const fontSumHead = 'bold 22px "PingFang SC","Microsoft YaHei",sans-serif'
+  const fontTotalLabel = 'bold 22px "PingFang SC","Microsoft YaHei",sans-serif'
+  const fontTotalAmt = 'bold 24px "PingFang SC","Microsoft YaHei",sans-serif'
 
   const labelW = colW[0] + colW[1]
   const formulaW = colW[2]
@@ -153,7 +181,6 @@ function paintSummarySection(ctx, x0, y, colW, tableW, feeRows, total) {
   const formulaX = x0 + labelW
   const amountX = formulaX + formulaW
 
-  // —— 汇总标题（左对齐，更像 Excel）——
   ctx.fillStyle = COLORS.summaryBg
   ctx.fillRect(x0, y, tableW, summaryHeadH)
   ctx.strokeStyle = COLORS.border
@@ -162,41 +189,45 @@ function paintSummarySection(ctx, x0, y, colW, tableW, feeRows, total) {
     font: fontSumHead,
     align: 'left',
     color: COLORS.title,
-    pad: 14
+    pad: 12
   })
   y += summaryHeadH
 
-  // —— 费用行 ——
   feeRows.forEach((fee) => {
+    const lh = cellLinesHeight(ctx, fee.label, labelW, fontLabel, 10, 24, 48)
+    const fh = cellLinesHeight(ctx, fee.formula || '', formulaW, fontFormula, 10, 24, 48)
+    const feeRowH = Math.max(lh, fh, 48)
+
     ctx.fillStyle = COLORS.card
     ctx.fillRect(x0, y, tableW, feeRowH)
     ctx.strokeStyle = COLORS.border
     ctx.strokeRect(x0 + 0.5, y + 0.5, tableW - 1, feeRowH - 1)
-    // 竖线：在明细列边界（车次|人工、人工|人天）
     drawVLines(ctx, x0, y, feeRowH, colW)
-    // 标签跨前两列
+
     drawCellText(ctx, fee.label, x0, y, labelW, feeRowH, {
       font: fontLabel,
       align: 'left',
-      pad: 14,
+      pad: 10,
+      lineH: 24,
       color: COLORS.text
     })
     drawCellText(ctx, fee.formula || '', formulaX, y, formulaW, feeRowH, {
       font: fontFormula,
       align: 'left',
-      pad: 12,
+      pad: 10,
+      lineH: 24,
       color: COLORS.muted
     })
     drawCellText(ctx, fee.amount, amountX, y, amountW, feeRowH, {
       font: fontAmount,
       align: 'right',
-      pad: 14,
+      pad: 10,
+      lineH: 24,
       color: COLORS.title
     })
     y += feeRowH
   })
 
-  // —— 总计行：黄底；「总计」在公式列右对齐，金额在人天列 ——
   ctx.fillStyle = COLORS.totalBg
   ctx.fillRect(x0, y, tableW, totalH)
   ctx.strokeStyle = COLORS.border
@@ -205,21 +236,17 @@ function paintSummarySection(ctx, x0, y, colW, tableW, feeRows, total) {
   drawCellText(ctx, '总计', formulaX, y, formulaW, totalH, {
     font: fontTotalLabel,
     align: 'right',
-    pad: 12,
+    pad: 10,
     color: COLORS.title
   })
   drawCellText(ctx, money(total), amountX, y, amountW, totalH, {
     font: fontTotalAmt,
     align: 'right',
-    pad: 14,
+    pad: 10,
     color: COLORS.title
   })
 
   return y + totalH
-}
-
-export function summaryBlockHeight(feeCount) {
-  return 44 + feeCount * 52 + 56
 }
 
 /**
@@ -274,26 +301,30 @@ export function paintMixedSettlementSheet(canvas, payload) {
   const emptyRows = rows.length === 0 ? 2 : 1
   for (let i = 0; i < emptyRows; i++) dataHeights.push(minRowH)
 
-  const feeRows = [
-    {
+  // 0 车不展示、不占汇总行（金额本为 0，总计不变）
+  const feeRows = []
+  if (Number(r.truckCount) > 0) {
+    feeRows.push({
       label: '渣土车费',
-      formula: `${r.truckCount ?? 0} 车 × ${r.truckUnitPrice ?? 0} 元/车`,
+      formula: `${r.truckCount} 车 × ${r.truckUnitPrice} 元/车`,
       amount: money(r.truckFee)
-    },
-    {
-      label: '做卫生人工费',
-      formula: `${r.workDays ?? 0} 人天 × ${r.laborUnitPrice ?? 0} 元/人天`,
-      amount: money(r.laborFee)
-    },
-    ...extras.map((x) => ({
+    })
+  }
+  feeRows.push({
+    label: '做卫生人工费',
+    formula: `${r.workDays ?? 0} 人天 × ${r.laborUnitPrice ?? 0} 元/人天`,
+    amount: money(r.laborFee)
+  })
+  extras.forEach((x) => {
+    feeRows.push({
       label: x.name || '零星',
       formula: '',
       amount: money(x.amount)
-    }))
-  ]
+    })
+  })
 
   const titleBlock = 52
-  const sumH = summaryBlockHeight(feeRows.length)
+  const sumH = measureSummaryHeight(measureCtx, colW, feeRows)
   const tableH =
     headerH + dataHeights.reduce((s, h) => s + h, 0) + sumH
 
@@ -446,7 +477,7 @@ function paintLaborTable(canvas, _mapped, rows, r, extras, title) {
   ]
 
   const titleBlock = 52
-  const sumH = summaryBlockHeight(feeRows.length)
+  const sumH = measureSummaryHeight(measureCtx, colW, feeRows)
   const tableH =
     headerH + dataHeights.reduce((s, h) => s + h, 0) + sumH
 

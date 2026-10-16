@@ -190,7 +190,7 @@ function copyShareLink() {
       <h3>结算</h3>
       <span class="muted" v-if="ratesHint">{{ ratesHint }}</span>
     </div>
-    <div class="sum-line">
+    <div v-if="result.truckCount > 0" class="sum-line">
       车费 {{ result.truckCount }} 车 ×
       <input
         v-model="truckUnitPrice"
