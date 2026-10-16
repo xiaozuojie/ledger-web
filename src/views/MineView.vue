@@ -6,7 +6,7 @@ import { clearSession, getSession } from '../lib/session.js'
 import { rowWorkDays } from '../calc/hours.js'
 import { computeMixed } from '../calc/settlement.js'
 import { downloadHtmlXls } from '../utils/exportXls.js'
-import { paintMixedSettlementSheet, canvasToDataUrl } from '../utils/shareImage.js'
+import { renderMixedSettlementDataUrl } from '../utils/shareImage.js'
 import SettlementPreview from '../components/SettlementPreview.vue'
 
 const router = useRouter()
@@ -16,7 +16,6 @@ const extras = ref([])
 const err = ref('')
 const truckUnitPrice = ref('')
 const laborUnitPrice = ref('')
-const canvasRef = ref(null)
 const savedHint = ref('')
 const previewOpen = ref(false)
 const previewSrc = ref('')
@@ -117,29 +116,36 @@ function exportXls() {
   downloadHtmlXls(table, (ledger.value && ledger.value.name) || '结算')
 }
 
-function shareImage() {
-  const r = result.value
-  paintMixedSettlementSheet(canvasRef.value, {
-    title: `${ledger.value?.name || '车 / 做卫生'} 记账明细`,
-    rows: rows.value.map((row) => ({
+async function shareImage() {
+  err.value = ''
+  try {
+    // 再拉一次，避免「我的」页数据未刷新导致明细空白
+    await refresh()
+    const r = result.value
+    const detailRows = rows.value.map((row) => ({
       date: row.date,
       trucks: row.trucks,
       laborNote: row.laborNote,
       workDays: row.workDays
-    })),
-    result: {
-      truckCount: r.truckCount,
-      truckUnitPrice: r.truckUnitPrice,
-      truckFee: r.truckFee,
-      workDays: r.workDays,
-      laborUnitPrice: r.laborUnitPrice,
-      laborFee: r.laborFee,
-      extras: extras.value,
-      total: r.total
-    }
-  })
-  previewSrc.value = canvasToDataUrl(canvasRef.value)
-  previewOpen.value = true
+    }))
+    previewSrc.value = await renderMixedSettlementDataUrl({
+      title: `${ledger.value?.name || '车 / 做卫生'} 记账明细`,
+      rows: detailRows,
+      result: {
+        truckCount: r.truckCount,
+        truckUnitPrice: r.truckUnitPrice,
+        truckFee: r.truckFee,
+        workDays: r.workDays,
+        laborUnitPrice: r.laborUnitPrice,
+        laborFee: r.laborFee,
+        extras: extras.value,
+        total: r.total
+      }
+    })
+    previewOpen.value = true
+  } catch (e) {
+    err.value = e.message || '生成结算图失败'
+  }
 }
 
 function logout() {
@@ -218,7 +224,6 @@ function switchLedger() {
     </p>
   </section>
 
-  <canvas ref="canvasRef" style="display: none" />
   <SettlementPreview
     :open="previewOpen"
     :src="previewSrc"

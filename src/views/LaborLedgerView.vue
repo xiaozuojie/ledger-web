@@ -8,7 +8,7 @@ const sessionInvite = () => getSession()?.invite_slug
 import { rowWorkDays } from '../calc/hours.js'
 import { computeLabor } from '../calc/settlement.js'
 import { downloadHtmlXls } from '../utils/exportXls.js'
-import { paintLaborSettlementSheet, canvasToDataUrl } from '../utils/shareImage.js'
+import { renderLaborSettlementDataUrl } from '../utils/shareImage.js'
 import SettlementPreview from '../components/SettlementPreview.vue'
 
 const router = useRouter()
@@ -19,7 +19,6 @@ const err = ref('')
 const laborUnitPrice = ref('')
 const extraName = ref('')
 const extraAmount = ref('')
-const canvasRef = ref(null)
 const previewOpen = ref(false)
 const previewSrc = ref('')
 
@@ -84,30 +83,35 @@ function exportXls() {
   downloadHtmlXls(table, ledger.value?.name || '工时结算')
 }
 
-function shareImage() {
-  const r = result.value
-  paintLaborSettlementSheet(canvasRef.value, {
-    title: `${ledger.value?.name || '工时'} 记账明细`,
-    rows: entries.value.map((e) => {
-      const g = e.groups || []
-      return {
-        date: e.date,
-        peopleText: g.map((x) => x.people).join('+'),
-        daysText: g.map((x) => x.days).join('+'),
-        workDays: rowWorkDays(e),
-        laborNote: e.summary || ''
+async function shareImage() {
+  err.value = ''
+  try {
+    await refresh()
+    const r = result.value
+    previewSrc.value = await renderLaborSettlementDataUrl({
+      title: `${ledger.value?.name || '工时'} 记账明细`,
+      rows: entries.value.map((e) => {
+        const g = e.groups || []
+        return {
+          date: e.date,
+          peopleText: g.map((x) => x.people).join('+'),
+          daysText: g.map((x) => x.days).join('+'),
+          workDays: rowWorkDays(e),
+          laborNote: e.summary || ''
+        }
+      }),
+      result: {
+        workDays: r.workDays,
+        unitPrice: r.unitPrice,
+        laborFee: r.laborFee,
+        extras: extras.value,
+        total: r.total
       }
-    }),
-    result: {
-      workDays: r.workDays,
-      unitPrice: r.unitPrice,
-      laborFee: r.laborFee,
-      extras: extras.value,
-      total: r.total
-    }
-  })
-  previewSrc.value = canvasToDataUrl(canvasRef.value)
-  previewOpen.value = true
+    })
+    previewOpen.value = true
+  } catch (e) {
+    err.value = e.message || '生成结算图失败'
+  }
 }
 
 function logout() {
@@ -197,7 +201,6 @@ function logout() {
     <button class="btn btn-primary" type="button" @click="exportXls">导出表格</button>
     <button class="btn btn-ghost" type="button" @click="shareImage">结算图</button>
   </div>
-  <canvas ref="canvasRef" style="display: none" />
   <SettlementPreview
     :open="previewOpen"
     :src="previewSrc"

@@ -117,14 +117,12 @@ function cellLinesHeight(ctx, text, width, font, pad = 10, lineH = 24, minH = 48
   return Math.max(minH, lines.length * lineH + pad * 2)
 }
 
-function measureRowHeight(ctx, cells, widths, font, minH = 48) {
-  ctx.font = font
-  let maxLines = 1
+function measureRowHeight(ctx, cells, widths, font, pad = 10, lineH = 26, minH = 52) {
+  let maxH = minH
   cells.forEach((text, i) => {
-    const lines = wrapLines(ctx, text, widths[i] - 16)
-    maxLines = Math.max(maxLines, lines.length)
+    maxH = Math.max(maxH, cellLinesHeight(ctx, text, widths[i], font, pad, lineH, minH))
   })
-  return Math.max(minH, maxLines * 26 + 16)
+  return maxH
 }
 
 function colOffset(colW, index) {
@@ -287,34 +285,33 @@ export function paintMixedSettlementSheet(canvas, payload) {
 
   const pad = 28
   const tableW = 720
-  const colW = [90, 120, 360, 150]
+  const colW = [88, 110, 372, 150]
   const headerH = 52
-  const minRowH = 48
+  const minRowH = 52
+  const cellPad = 10
+  const cellLineH = 26
   const fontCell = '22px "PingFang SC","Microsoft YaHei",sans-serif'
   const fontHead = 'bold 22px "PingFang SC","Microsoft YaHei",sans-serif'
   const fontTitle = 'bold 30px "PingFang SC","Microsoft YaHei",sans-serif'
 
-  // 预计算高度
-  const measureCtx = canvas.getContext('2d')
+  const rowCells = rows.map((row) => [
+    formatShortDate(row.date),
+    row.trucks || '',
+    row.laborNote || '',
+    row.workDays === '' || row.workDays == null || Number.isNaN(Number(row.workDays))
+      ? ''
+      : Number(row.workDays).toFixed(1)
+  ])
+
+  // 离屏 canvas 测量，避免 display:none 导致字宽为 0、明细空白
+  const measureCanvas = typeof document !== 'undefined' ? document.createElement('canvas') : canvas
+  const measureCtx = measureCanvas.getContext('2d')
   measureCtx.font = fontCell
-  const dataHeights = rows.map((row) =>
-    measureRowHeight(
-      measureCtx,
-      [
-        formatShortDate(row.date),
-        row.trucks || '',
-        row.laborNote || '',
-        row.workDays === '' || row.workDays == null
-          ? ''
-          : String(Number(row.workDays).toFixed(1))
-      ],
-      colW,
-      fontCell,
-      minRowH
-    )
+  const dataHeights = rowCells.map((cells) =>
+    measureRowHeight(measureCtx, cells, colW, fontCell, cellPad, cellLineH, minRowH)
   )
-  // 至少留一行空行，贴近样表
-  const emptyRows = rows.length === 0 ? 2 : 1
+  // 有数据时不再塞空行，避免「只有空表」的错觉；无数据时留两行空行
+  const emptyRows = rowCells.length === 0 ? 2 : 0
   for (let i = 0; i < emptyRows; i++) dataHeights.push(minRowH)
 
   // 0 车不展示、不占汇总行（金额本为 0，总计不变）
@@ -383,21 +380,13 @@ export function paintMixedSettlementSheet(canvas, payload) {
   drawVLines(ctx, x0, y, headerH, colW)
   y += headerH
 
-  // 数据行（含空行）
   const allCells = [
-    ...rows.map((row) => [
-      formatShortDate(row.date),
-      row.trucks || '',
-      row.laborNote || '',
-      row.workDays === '' || row.workDays == null
-        ? ''
-        : Number(row.workDays).toFixed(1)
-    ]),
+    ...rowCells,
     ...Array.from({ length: emptyRows }, () => ['', '', '', ''])
   ]
 
   allCells.forEach((cells, idx) => {
-    const rh = dataHeights[idx]
+    const rh = dataHeights[idx] || minRowH
     ctx.fillStyle = COLORS.card
     ctx.fillRect(x0, y, tableW, rh)
     ctx.strokeStyle = COLORS.border
@@ -409,7 +398,10 @@ export function paintMixedSettlementSheet(canvas, payload) {
         font: fontCell,
         align: i === 2 ? 'left' : i === 3 ? 'right' : 'center',
         color: COLORS.text,
-        pad: i === 2 || i === 3 ? 12 : 8
+        pad: cellPad,
+        lineH: cellLineH,
+        valign: 'top',
+        clip: true
       })
       xx += colW[i]
     }
@@ -417,6 +409,20 @@ export function paintMixedSettlementSheet(canvas, payload) {
   })
 
   paintSummarySection(ctx, x0, y, colW, tableW, feeRows, r.total)
+}
+
+/** 生成综合结算图 DataURL（自建 canvas，不依赖页面上隐藏节点） */
+export async function renderMixedSettlementDataUrl(payload) {
+  if (typeof document !== 'undefined' && document.fonts?.ready) {
+    try {
+      await document.fonts.ready
+    } catch {
+      /* ignore */
+    }
+  }
+  const canvas = document.createElement('canvas')
+  paintMixedSettlementSheet(canvas, payload)
+  return canvasToDataUrl(canvas)
 }
 
 /**
@@ -456,27 +462,27 @@ function paintLaborTable(canvas, _mapped, rows, r, extras, title) {
   const tableW = 720
   const colW = [120, 200, 200, 200]
   const headerH = 52
-  const minRowH = 48
+  const minRowH = 52
+  const cellPad = 10
+  const cellLineH = 26
   const fontCell = '22px "PingFang SC","Microsoft YaHei",sans-serif'
   const fontHead = 'bold 22px "PingFang SC","Microsoft YaHei",sans-serif'
   const fontTitle = 'bold 30px "PingFang SC","Microsoft YaHei",sans-serif'
 
-  const measureCtx = canvas.getContext('2d')
-  const dataHeights = rows.map((row) =>
-    measureRowHeight(
-      measureCtx,
-      [
-        formatShortDate(row.date),
-        String(row.peopleText || ''),
-        String(row.daysText || ''),
-        row.workDays == null ? '' : Number(row.workDays).toFixed(1)
-      ],
-      colW,
-      fontCell,
-      minRowH
-    )
+  const rowCells = rows.map((row) => [
+    formatShortDate(row.date),
+    String(row.peopleText || ''),
+    String(row.daysText || ''),
+    row.workDays == null || Number.isNaN(Number(row.workDays))
+      ? ''
+      : Number(row.workDays).toFixed(1)
+  ])
+  const measureCanvas = typeof document !== 'undefined' ? document.createElement('canvas') : canvas
+  const measureCtx = measureCanvas.getContext('2d')
+  const dataHeights = rowCells.map((cells) =>
+    measureRowHeight(measureCtx, cells, colW, fontCell, cellPad, cellLineH, minRowH)
   )
-  const emptyRows = rows.length === 0 ? 2 : 1
+  const emptyRows = rowCells.length === 0 ? 2 : 0
   for (let i = 0; i < emptyRows; i++) dataHeights.push(minRowH)
 
   const feeRows = [
@@ -530,16 +536,11 @@ function paintLaborTable(canvas, _mapped, rows, r, extras, title) {
   y += headerH
 
   const allCells = [
-    ...rows.map((row) => [
-      formatShortDate(row.date),
-      String(row.peopleText || ''),
-      String(row.daysText || ''),
-      row.workDays == null ? '' : Number(row.workDays).toFixed(1)
-    ]),
+    ...rowCells,
     ...Array.from({ length: emptyRows }, () => ['', '', '', ''])
   ]
   allCells.forEach((cells, idx) => {
-    const rh = dataHeights[idx]
+    const rh = dataHeights[idx] || minRowH
     ctx.fillStyle = COLORS.card
     ctx.fillRect(x0, y, tableW, rh)
     ctx.strokeStyle = COLORS.border
@@ -550,7 +551,10 @@ function paintLaborTable(canvas, _mapped, rows, r, extras, title) {
       drawCellText(ctx, t, xx, y, colW[i], rh, {
         font: fontCell,
         align: i === 3 ? 'right' : 'center',
-        pad: i === 3 ? 12 : 8
+        pad: cellPad,
+        lineH: cellLineH,
+        valign: 'top',
+        clip: true
       })
       xx += colW[i]
     })
@@ -558,6 +562,19 @@ function paintLaborTable(canvas, _mapped, rows, r, extras, title) {
   })
 
   paintSummarySection(ctx, x0, y, colW, tableW, feeRows, r.total)
+}
+
+export async function renderLaborSettlementDataUrl(payload) {
+  if (typeof document !== 'undefined' && document.fonts?.ready) {
+    try {
+      await document.fonts.ready
+    } catch {
+      /* ignore */
+    }
+  }
+  const canvas = document.createElement('canvas')
+  paintLaborSettlementSheet(canvas, payload)
+  return canvasToDataUrl(canvas)
 }
 
 /** @deprecated 旧版蓝头清单；请改用 paintMixedSettlementSheet */
