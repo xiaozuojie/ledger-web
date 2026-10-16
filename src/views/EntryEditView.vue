@@ -263,13 +263,14 @@ async function addExtra() {
     </p>
     <label class="row" style="margin-top: 12px">
       <input v-model="useOverride" type="checkbox" style="width: auto; min-height: auto" />
-      手工改合计
+      手工改合计（勾选并填写后，以手改数字为准，含 0）
     </label>
     <input
       v-if="useOverride"
       v-model="overrideTotal"
       type="number"
       inputmode="decimal"
+      placeholder="必填数字，留空则仍按人数×天数"
     />
     <label>做卫生人工记录 / 备注</label>
     <input
@@ -301,10 +302,11 @@ async function addExtra() {
     <button
       class="btn btn-primary"
       type="button"
+      :disabled="saving"
       :style="entryId ? '' : 'grid-column: 1 / -1'"
       @click="save"
     >
-      保存
+      {{ saving ? '保存中…' : '保存' }}
     </button>
   </div>
   <div class="fab-space" />

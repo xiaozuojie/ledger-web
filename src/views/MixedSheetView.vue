@@ -5,6 +5,7 @@ import * as api from '../api/ledgerApi.js'
 import { getSession } from '../lib/session.js'
 import { rowWorkDays } from '../calc/hours.js'
 import { computeMixed } from '../calc/settlement.js'
+import UndoToast from '../components/UndoToast.vue'
 
 const sessionInvite = () => getSession()?.invite_slug
 
@@ -18,6 +19,9 @@ const laborUnitPrice = ref('')
 const extraName = ref('')
 const extraAmount = ref('')
 const ratesHint = ref('')
+const toastVisible = ref(false)
+const toastMsg = ref('')
+const pendingDelete = ref(null)
 
 const rows = computed(() =>
   entries.value.map((e) => ({
@@ -60,6 +64,40 @@ function addEntry() {
 }
 function editEntry(id) {
   router.push({ name: 'entry', query: { kind: 'mixed', id } })
+}
+
+function askDelete(id) {
+  if (pendingDelete.value) return
+  const row = entries.value.find((e) => e.id === id)
+  if (!row) return
+  if (!confirm('删除这条明细？')) return
+  pendingDelete.value = row
+  entries.value = entries.value.filter((e) => e.id !== id)
+  toastMsg.value = '已删除一行'
+  toastVisible.value = true
+}
+
+async function onExpireDelete() {
+  const row = pendingDelete.value
+  toastVisible.value = false
+  pendingDelete.value = null
+  if (!row) return
+  try {
+    await api.removeEntry(row.id)
+  } catch (e) {
+    err.value = e.message
+    await refresh()
+  }
+}
+
+function onUndoDelete() {
+  const row = pendingDelete.value
+  toastVisible.value = false
+  pendingDelete.value = null
+  if (!row) return
+  entries.value = [...entries.value, row].sort((a, b) =>
+    String(a.date).localeCompare(String(b.date))
+  )
 }
 
 async function saveRates() {
@@ -134,19 +172,24 @@ function copyShareLink() {
   <p v-if="err" class="err">{{ err }}</p>
   <p v-if="ratesHint" class="hint-ok">{{ ratesHint }}</p>
 
-  <div class="entry-list">
-    <div
-      v-for="row in rows"
-      :key="row.id"
-      class="entry-card"
-      @click="editEntry(row.id)"
-    >
-      <div class="head">
+  <div class="entry-list always">
+    <div v-for="row in rows" :key="row.id" class="entry-card">
+      <div class="head" @click="editEntry(row.id)">
         <span class="date">{{ row.date }}</span>
         <span class="days">{{ row.workDays }} 人天</span>
       </div>
-      <div class="meta" v-if="row.trucks">车次：{{ row.trucks }}</div>
-      <div class="meta">{{ row.laborNote || '（无人工说明）' }}</div>
+      <div v-if="row.trucks" class="meta" @click="editEntry(row.id)">
+        车次：{{ row.trucks }}
+      </div>
+      <div class="meta" @click="editEntry(row.id)">
+        {{ row.laborNote || '（无人工说明）' }}
+      </div>
+      <div class="card-actions">
+        <button class="btn btn-ghost" type="button" @click="editEntry(row.id)">编辑</button>
+        <button class="btn btn-ghost danger-ghost" type="button" @click="askDelete(row.id)">
+          删除
+        </button>
+      </div>
     </div>
     <div v-if="!rows.length" class="card empty">暂无明细，点下方新建</div>
   </div>
@@ -159,26 +202,32 @@ function copyShareLink() {
           <th>渣土车数</th>
           <th>做卫生人工记录</th>
           <th>折合人天</th>
+          <th>操作</th>
         </tr>
       </thead>
       <tbody>
-        <tr
-          v-for="row in rows"
-          :key="'t-' + row.id"
-          style="cursor: pointer"
-          @click="editEntry(row.id)"
-        >
-          <td>{{ row.date }}</td>
-          <td>{{ row.trucks }}</td>
-          <td>{{ row.laborNote }}</td>
-          <td>{{ row.workDays }}</td>
+        <tr v-for="row in rows" :key="'t-' + row.id">
+          <td @click="editEntry(row.id)" style="cursor: pointer">{{ row.date }}</td>
+          <td @click="editEntry(row.id)" style="cursor: pointer">{{ row.trucks }}</td>
+          <td @click="editEntry(row.id)" style="cursor: pointer">{{ row.laborNote }}</td>
+          <td @click="editEntry(row.id)" style="cursor: pointer">{{ row.workDays }}</td>
+          <td>
+            <button class="linkish" type="button" @click="askDelete(row.id)">删除</button>
+          </td>
         </tr>
         <tr v-if="!rows.length">
-          <td colspan="4" class="muted">暂无明细</td>
+          <td colspan="5" class="muted">暂无明细</td>
         </tr>
       </tbody>
     </table>
   </div>
+
+  <UndoToast
+    :visible="toastVisible"
+    :message="toastMsg"
+    @undo="onUndoDelete"
+    @expire="onExpireDelete"
+  />
 
   <button class="btn btn-primary fab with-tabbar" type="button" @click="addEntry">
     ＋ 新建一行

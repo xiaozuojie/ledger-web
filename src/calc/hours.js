@@ -9,8 +9,8 @@ function groupsWorkDays(entry) {
 }
 
 /**
- * 折合工日/人天。手改优先；若手改为 0 但分组算出 >0，视为脏数据回退分组
- *（常见于勾了「手工改合计」却未填数字，Number('')===0）
+ * 折合工日/人天。只要存了手改数字（含 0），一律以手改为准；
+ * 未选手改 / 手改为空 → 用分组人数×天数。
  */
 export function rowWorkDays(entry) {
   const fromGroups = groupsWorkDays(entry)
@@ -18,7 +18,6 @@ export function rowWorkDays(entry) {
   if (raw == null || raw === '') return fromGroups
   const o = Number(raw)
   if (!Number.isFinite(o)) return fromGroups
-  if (o === 0 && fromGroups > 0) return fromGroups
   return o
 }
 

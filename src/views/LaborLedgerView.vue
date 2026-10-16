@@ -8,6 +8,7 @@ import { computeLabor } from '../calc/settlement.js'
 import { downloadHtmlXls } from '../utils/exportXls.js'
 import { renderLaborSettlementDataUrl } from '../utils/shareImage.js'
 import SettlementPreview from '../components/SettlementPreview.vue'
+import UndoToast from '../components/UndoToast.vue'
 
 const sessionInvite = () => getSession()?.invite_slug
 
@@ -21,6 +22,9 @@ const extraName = ref('')
 const extraAmount = ref('')
 const previewOpen = ref(false)
 const previewSrc = ref('')
+const toastVisible = ref(false)
+const toastMsg = ref('')
+const pendingDelete = ref(null)
 
 const result = computed(() =>
   computeLabor({
@@ -64,6 +68,40 @@ function editEntry(id) {
 
 function addEntry() {
   router.push({ name: 'entry', query: { kind: 'labor' } })
+}
+
+function askDelete(id) {
+  if (pendingDelete.value) return
+  const row = entries.value.find((e) => e.id === id)
+  if (!row) return
+  if (!confirm('删除这条明细？')) return
+  pendingDelete.value = row
+  entries.value = entries.value.filter((e) => e.id !== id)
+  toastMsg.value = '已删除一行'
+  toastVisible.value = true
+}
+
+async function onExpireDelete() {
+  const row = pendingDelete.value
+  toastVisible.value = false
+  pendingDelete.value = null
+  if (!row) return
+  try {
+    await api.removeEntry(row.id)
+  } catch (e) {
+    err.value = e.message
+    await refresh()
+  }
+}
+
+function onUndoDelete() {
+  const row = pendingDelete.value
+  toastVisible.value = false
+  pendingDelete.value = null
+  if (!row) return
+  entries.value = [...entries.value, row].sort((a, b) =>
+    String(a.date).localeCompare(String(b.date))
+  )
 }
 
 async function saveRates() {
@@ -162,18 +200,21 @@ function logout() {
 
   <!-- always：避免宽屏 media 把列表藏掉却无表格 -->
   <div class="entry-list always">
-    <div
-      v-for="row in detailRows"
-      :key="row.id"
-      class="entry-card"
-      @click="editEntry(row.id)"
-    >
-      <div class="head">
+    <div v-for="row in detailRows" :key="row.id" class="entry-card">
+      <div class="head" @click="editEntry(row.id)">
         <span class="date">{{ row.date }}</span>
         <span class="days">{{ row.workDays }} 工日</span>
       </div>
-      <div class="meta">人数 {{ row.peopleText }} · 天数 {{ row.daysText }}</div>
-      <div v-if="row.note" class="meta">{{ row.note }}</div>
+      <div class="meta" @click="editEntry(row.id)">
+        人数 {{ row.peopleText }} · 天数 {{ row.daysText }}
+      </div>
+      <div v-if="row.note" class="meta" @click="editEntry(row.id)">{{ row.note }}</div>
+      <div class="card-actions">
+        <button class="btn btn-ghost" type="button" @click="editEntry(row.id)">编辑</button>
+        <button class="btn btn-ghost danger-ghost" type="button" @click="askDelete(row.id)">
+          删除
+        </button>
+      </div>
     </div>
     <div v-if="!detailRows.length" class="card empty">
       暂无每日明细，点下方「新建一行」开始记
@@ -188,26 +229,32 @@ function logout() {
           <th>人数</th>
           <th>天数</th>
           <th>折合工日</th>
+          <th>操作</th>
         </tr>
       </thead>
       <tbody>
-        <tr
-          v-for="row in detailRows"
-          :key="'t-' + row.id"
-          style="cursor: pointer"
-          @click="editEntry(row.id)"
-        >
-          <td>{{ row.date }}</td>
-          <td>{{ row.peopleText }}</td>
-          <td>{{ row.daysText }}</td>
-          <td>{{ row.workDays }}</td>
+        <tr v-for="row in detailRows" :key="'t-' + row.id">
+          <td @click="editEntry(row.id)" style="cursor: pointer">{{ row.date }}</td>
+          <td @click="editEntry(row.id)" style="cursor: pointer">{{ row.peopleText }}</td>
+          <td @click="editEntry(row.id)" style="cursor: pointer">{{ row.daysText }}</td>
+          <td @click="editEntry(row.id)" style="cursor: pointer">{{ row.workDays }}</td>
+          <td>
+            <button class="linkish" type="button" @click="askDelete(row.id)">删除</button>
+          </td>
         </tr>
         <tr v-if="!detailRows.length">
-          <td colspan="4" class="muted">暂无明细</td>
+          <td colspan="5" class="muted">暂无明细</td>
         </tr>
       </tbody>
     </table>
   </div>
+
+  <UndoToast
+    :visible="toastVisible"
+    :message="toastMsg"
+    @undo="onUndoDelete"
+    @expire="onExpireDelete"
+  />
 
   <button class="btn btn-primary fab with-tabbar" type="button" @click="addEntry">
     ＋ 新建一行

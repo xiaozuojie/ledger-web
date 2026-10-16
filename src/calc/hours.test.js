@@ -14,15 +14,21 @@ describe('hours', () => {
     expect(
       rowWorkDays({ groups: [{ people: 2, days: 0.5 }], overrideTotal: 9 })
     ).toBe(9)
-    // 脏数据：手改 0 但分组有值 → 回退分组
+    // 手改 0 必须以手改为准（即使分组算出 2）
     expect(
       rowWorkDays({
         groups: [{ people: 2, days: 1 }],
         overrideTotal: 0
       })
-    ).toBe(2)
-    // 真的手改成 0：分组也为 0 时保持 0
+    ).toBe(0)
     expect(rowWorkDays({ groups: [], overrideTotal: 0 })).toBe(0)
+    // 手改为空字符串 → 走分组
+    expect(
+      rowWorkDays({
+        groups: [{ people: 2, days: 1 }],
+        overrideTotal: ''
+      })
+    ).toBe(2)
     expect(
       sumWorkDays([
         {
