@@ -492,13 +492,19 @@ function paintLaborTable(canvas, _mapped, rows, r, extras, title) {
   const emptyRows = rowCells.length === 0 ? 2 : 0
   for (let i = 0; i < emptyRows; i++) dataHeights.push(minRowH)
 
-  const feeRows = [
-    {
-      label: '人工费',
-      formula: `${r.workDays} 工日 × ${r.unitPrice ?? r.laborUnitPrice} 元/工日`,
-      amount: money(r.laborFee)
-    }
-  ]
+  const feeRows = []
+  if (Number(r.truckCount) > 0) {
+    feeRows.push({
+      label: '渣土车费',
+      formula: `${r.truckCount} 车 × ${r.truckUnitPrice} 元/车`,
+      amount: money(r.truckFee)
+    })
+  }
+  feeRows.push({
+    label: '人工费',
+    formula: `${r.workDays} 工日 × ${r.unitPrice ?? r.laborUnitPrice} 元/工日`,
+    amount: money(r.laborFee)
+  })
   if (Number(r.dayExtrasSum) > 0) {
     feeRows.push({
       label: '各日零星合计',

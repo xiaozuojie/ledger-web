@@ -496,6 +496,18 @@ table.sheet th {
   border-top: 1px dashed var(--border);
 }
 
+.top-actions .btn-row-3 .btn {
+  font-size: 13px;
+  padding: 0 8px;
+}
+
+.truck-block {
+  margin: 4px 0 8px;
+  padding: 12px;
+  background: var(--blue-soft);
+  border-radius: 12px;
+}
+
 .day-strip {
   display: grid;
   grid-template-columns: repeat(3, 1fr);

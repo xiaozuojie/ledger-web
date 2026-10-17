@@ -174,11 +174,11 @@ function switchLedger() {
   <p v-if="err" class="err">{{ err }}</p>
   <p v-if="savedHint" class="hint-ok">{{ savedHint }}</p>
 
-  <section v-if="kind === 'mixed'" class="card">
+  <section class="card">
     <h3>单价</h3>
     <label>渣土车（元/车）</label>
     <input v-model="truckUnitPrice" type="number" inputmode="decimal" />
-    <label>做卫生（元/人天）</label>
+    <label>{{ kind === 'mixed' ? '做卫生（元/人天）' : '工日（元/工日）' }}</label>
     <input v-model="laborUnitPrice" type="number" inputmode="decimal" />
     <button class="btn btn-primary btn-block" type="button" @click="saveRates">
       保存单价

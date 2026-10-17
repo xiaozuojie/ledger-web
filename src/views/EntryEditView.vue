@@ -46,6 +46,10 @@ const truckStep = computed({
 
 onMounted(async () => {
   date.value = todayStr()
+  if (route.query.focus === 'trucks' && !entryId.value) {
+    trucks.value = '1车'
+    hint.value = '已预填 1 车，可改车数后保存'
+  }
   if (!entryId.value) return
   try {
     const list = await api.listEntries()
@@ -151,10 +155,10 @@ async function save() {
   if (!laborNoteTouched.value) {
     note = buildLaborNote(mapped, workDays) || note
   }
-  const fields =
-    kind.value === 'mixed'
-      ? { trucks: trucks.value, laborNote: note }
-      : { laborNote: note }
+  const fields = {
+    trucks: trucks.value || '',
+    laborNote: note
+  }
   saving.value = true
   try {
     await api.upsertEntry({
@@ -233,7 +237,8 @@ async function remove() {
   <div class="card">
     <label>日期</label>
     <input v-model="date" type="date" />
-    <template v-if="kind === 'mixed'">
+
+    <div id="truck-block" class="truck-block">
       <label>渣土车数</label>
       <div class="stepper">
         <button class="btn btn-ghost step" type="button" @click="bumpTruck(-1)">−</button>
@@ -244,10 +249,12 @@ async function remove() {
         />
         <button class="btn btn-ghost step" type="button" @click="bumpTruck(1)">＋</button>
       </div>
-      <p v-if="truckStep != null" class="muted" style="margin: -4px 0 10px">
-        当前按 {{ truckStep }} 车计入（可改成文字说明）
+      <p class="muted" style="margin: -4px 0 10px">
+        <template v-if="truckStep != null">当前按 {{ truckStep }} 车计入结算</template>
+        <template v-else>可填「2车」或「1车渣土1车泡沫」；无车可留空</template>
       </p>
-    </template>
+    </div>
+
     <label>做卫生 · 工时分组</label>
     <div v-for="(g, idx) in groups" :key="idx" class="row" style="margin-bottom: 8px">
       <input

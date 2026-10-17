@@ -58,6 +58,12 @@ export function computeLabor({ entries, rates, extras }) {
   const workDays = sumWorkDays(entries)
   const unitPrice = rates?.laborUnitPrice ?? 300
   const laborFee = laborTotal(workDays, unitPrice)
+  const truckCount = (entries || []).reduce((s, e) => {
+    const f = e.fields || {}
+    return s + parseTruckCount(f.trucks || '')
+  }, 0)
+  const truckUnit = rates?.truckUnitPrice ?? 100
+  const truckFee = truckCount * truckUnit
   const list = extras || []
   const dayExtrasSum = sumEntryExtras(entries)
   const bookExtrasSum = ledgerExtrasSum(list)
@@ -67,11 +73,14 @@ export function computeLabor({ entries, rates, extras }) {
     workDays,
     unitPrice,
     laborFee,
+    truckCount,
+    truckUnitPrice: truckUnit,
+    truckFee,
     extras: list,
     dayExtrasSum,
     bookExtrasSum,
     extrasSum,
-    total: laborFee + extrasSum,
+    total: laborFee + truckFee + extrasSum,
     entryCount: (entries || []).length
   }
 }

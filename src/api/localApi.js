@@ -140,7 +140,10 @@ export async function createLedger({ name, templateId }) {
           truckUnitPrice: tpl.settlement.truckUnitPrice ?? 100,
           laborUnitPrice: tpl.settlement.laborUnitPrice ?? 230
         }
-      : { laborUnitPrice: tpl.settlement.defaultUnitPrice ?? 300 }
+      : {
+          laborUnitPrice: tpl.settlement.defaultUnitPrice ?? 300,
+          truckUnitPrice: tpl.settlement.truckUnitPrice ?? 100
+        }
   const ledger = {
     id: uid(),
     name: name.trim(),

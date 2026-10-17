@@ -18,6 +18,7 @@ const entries = ref([])
 const extras = ref([])
 const err = ref('')
 const laborUnitPrice = ref('')
+const truckUnitPrice = ref('')
 const extraName = ref('')
 const extraAmount = ref('')
 const previewOpen = ref(false)
@@ -30,7 +31,10 @@ const showExtraForm = ref(false)
 const result = computed(() =>
   computeLabor({
     entries: entries.value,
-    rates: { laborUnitPrice: Number(laborUnitPrice.value) || 0 },
+    rates: {
+      laborUnitPrice: Number(laborUnitPrice.value) || 0,
+      truckUnitPrice: Number(truckUnitPrice.value) || 0
+    },
     extras: extras.value
   })
 )
@@ -44,6 +48,7 @@ const detailRows = computed(() =>
       peopleText: g.map((x) => x.people).filter((v) => v !== '' && v != null).join('+') || '—',
       daysText: g.map((x) => x.days).filter((v) => v !== '' && v != null).join('+') || '—',
       workDays: rowWorkDays(e),
+      trucks: (e.fields && e.fields.trucks) || '',
       note: e.summary || (e.fields && e.fields.laborNote) || '',
       dayExtras: entryExtrasSum(e)
     }
@@ -57,6 +62,7 @@ async function refresh() {
     entries.value = await api.listEntries()
     extras.value = await api.listExtras()
     laborUnitPrice.value = String(ledger.value.rates?.laborUnitPrice ?? 300)
+    truckUnitPrice.value = String(ledger.value.rates?.truckUnitPrice ?? 100)
   } catch (e) {
     err.value = e.message
   }
@@ -70,6 +76,10 @@ function editEntry(id) {
 
 function addEntry() {
   router.push({ name: 'entry', query: { kind: 'labor' } })
+}
+
+function addTruckEntry() {
+  router.push({ name: 'entry', query: { kind: 'labor', focus: 'trucks' } })
 }
 
 function askDelete(id) {
@@ -108,7 +118,10 @@ function onUndoDelete() {
 
 async function saveRates() {
   try {
-    await api.updateRates({ laborUnitPrice: Number(laborUnitPrice.value) || 0 })
+    await api.updateRates({
+      laborUnitPrice: Number(laborUnitPrice.value) || 0,
+      truckUnitPrice: Number(truckUnitPrice.value) || 0
+    })
     await refresh()
   } catch (e) {
     err.value = e.message
@@ -171,6 +184,9 @@ async function shareImage() {
         workDays: r.workDays,
         unitPrice: r.unitPrice,
         laborFee: r.laborFee,
+        truckCount: r.truckCount,
+        truckUnitPrice: r.truckUnitPrice,
+        truckFee: r.truckFee,
         dayExtrasSum: r.dayExtrasSum,
         extras: extras.value,
         total: r.total
@@ -207,14 +223,15 @@ function logout() {
   <p v-if="err" class="err">{{ err }}</p>
 
   <section class="card top-actions">
-    <div class="btn-row">
+    <div class="btn-row-3">
       <button class="btn btn-primary" type="button" @click="addEntry">＋ 新建一行</button>
+      <button class="btn btn-ghost" type="button" @click="addTruckEntry">＋ 记渣土车</button>
       <button class="btn btn-ghost" type="button" @click="openExtraForm">
-        {{ showExtraForm ? '收起整本零星' : '＋ 整本零星' }}
+        {{ showExtraForm ? '收起' : '＋ 整本零星' }}
       </button>
     </div>
     <p class="muted" style="margin: 8px 0 0">
-      当日零星请在「新建/编辑一行」里添加；此处为不跟日期的整本零星。
+      「记渣土车」会打开录入并预填 1 车；当日零星在行内添加。
     </p>
     <div v-if="showExtraForm" class="extra-panel">
       <label>整本零星名称</label>
@@ -242,6 +259,7 @@ function logout() {
         <span class="days">{{ row.workDays }} 工日</span>
       </div>
       <div class="meta" @click="editEntry(row.id)">
+        <template v-if="row.trucks">车次 {{ row.trucks }} · </template>
         人数 {{ row.peopleText }} · 天数 {{ row.daysText }}
         <template v-if="row.dayExtras"> · 当日零星 {{ row.dayExtras }}</template>
       </div>
@@ -263,6 +281,7 @@ function logout() {
       <thead>
         <tr>
           <th>日期</th>
+          <th>渣土车</th>
           <th>人数</th>
           <th>天数</th>
           <th>折合工日</th>
@@ -272,6 +291,7 @@ function logout() {
       <tbody>
         <tr v-for="row in detailRows" :key="'t-' + row.id">
           <td @click="editEntry(row.id)" style="cursor: pointer">{{ row.date }}</td>
+          <td @click="editEntry(row.id)" style="cursor: pointer">{{ row.trucks || '—' }}</td>
           <td @click="editEntry(row.id)" style="cursor: pointer">{{ row.peopleText }}</td>
           <td @click="editEntry(row.id)" style="cursor: pointer">{{ row.daysText }}</td>
           <td @click="editEntry(row.id)" style="cursor: pointer">{{ row.workDays }}</td>
@@ -280,7 +300,7 @@ function logout() {
           </td>
         </tr>
         <tr v-if="!detailRows.length">
-          <td colspan="5" class="muted">暂无明细</td>
+          <td colspan="6" class="muted">暂无明细</td>
         </tr>
       </tbody>
     </table>
@@ -295,6 +315,18 @@ function logout() {
 
   <section class="summary">
     <h3>结算汇总</h3>
+    <div v-if="result.truckCount > 0" class="sum-line sum-line-wrap">
+      <span class="sum-label">车费 {{ result.truckCount }} 车 ×</span>
+      <input
+        v-model="truckUnitPrice"
+        class="price"
+        type="number"
+        inputmode="decimal"
+        @change="saveRates"
+      />
+      <span>=</span>
+      <strong>{{ result.truckFee }}</strong>
+    </div>
     <div class="sum-line sum-line-wrap">
       <span class="sum-label">工日 {{ result.workDays }} ×</span>
       <input

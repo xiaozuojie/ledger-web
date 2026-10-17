@@ -64,6 +64,9 @@ onMounted(refresh)
 function addEntry() {
   router.push({ name: 'entry', query: { kind: 'mixed' } })
 }
+function addTruckEntry() {
+  router.push({ name: 'entry', query: { kind: 'mixed', focus: 'trucks' } })
+}
 function editEntry(id) {
   router.push({ name: 'entry', query: { kind: 'mixed', id } })
 }
@@ -180,14 +183,15 @@ function copyShareLink() {
   <p v-if="ratesHint" class="hint-ok">{{ ratesHint }}</p>
 
   <section class="card top-actions">
-    <div class="btn-row">
+    <div class="btn-row-3">
       <button class="btn btn-primary" type="button" @click="addEntry">＋ 新建一行</button>
+      <button class="btn btn-ghost" type="button" @click="addTruckEntry">＋ 记渣土车</button>
       <button class="btn btn-ghost" type="button" @click="openExtraForm">
-        {{ showExtraForm ? '收起整本零星' : '＋ 整本零星' }}
+        {{ showExtraForm ? '收起' : '＋ 整本零星' }}
       </button>
     </div>
     <p class="muted" style="margin: 8px 0 0">
-      当日零星在「新建/编辑一行」里加；此处为不跟日期的整本零星。
+      「记渣土车」预填 1 车；当日零星在行内加。
     </p>
     <div v-if="showExtraForm" class="extra-panel">
       <label>整本零星名称</label>
