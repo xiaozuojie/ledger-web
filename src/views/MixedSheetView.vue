@@ -22,6 +22,7 @@ const ratesHint = ref('')
 const toastVisible = ref(false)
 const toastMsg = ref('')
 const pendingDelete = ref(null)
+const showExtraForm = ref(false)
 
 const rows = computed(() =>
   entries.value.map((e) => ({
@@ -120,10 +121,15 @@ async function addExtra() {
     await api.addExtra(extraName.value, extraAmount.value)
     extraName.value = ''
     extraAmount.value = ''
+    showExtraForm.value = false
     await refresh()
   } catch (e) {
     err.value = e.message
   }
+}
+
+function openExtraForm() {
+  showExtraForm.value = !showExtraForm.value
 }
 
 async function removeExtra(id) {
@@ -172,6 +178,31 @@ function copyShareLink() {
   <p v-if="err" class="err">{{ err }}</p>
   <p v-if="ratesHint" class="hint-ok">{{ ratesHint }}</p>
 
+  <section class="card top-actions">
+    <div class="btn-row">
+      <button class="btn btn-primary" type="button" @click="addEntry">＋ 新建一行</button>
+      <button class="btn btn-ghost" type="button" @click="openExtraForm">
+        {{ showExtraForm ? '收起零星' : '＋ 添加零星' }}
+      </button>
+    </div>
+    <div v-if="showExtraForm" class="extra-panel">
+      <label>零星名称</label>
+      <input v-model="extraName" placeholder="如 门口做卫生" />
+      <label>金额</label>
+      <input v-model="extraAmount" type="number" inputmode="decimal" placeholder="0" />
+      <div class="btn-row">
+        <button class="btn btn-ghost" type="button" @click="showExtraForm = false">取消</button>
+        <button class="btn btn-primary" type="button" @click="addExtra">确认添加</button>
+      </div>
+    </div>
+    <div v-if="extras.length" class="extra-list-top">
+      <div v-for="x in extras" :key="x.id" class="extra-row">
+        <span>{{ x.name }} = {{ x.amount }}</span>
+        <button class="linkish" type="button" @click="removeExtra(x.id)">删除</button>
+      </div>
+    </div>
+  </section>
+
   <div class="entry-list always">
     <div v-for="row in rows" :key="row.id" class="entry-card">
       <div class="head" @click="editEntry(row.id)">
@@ -191,7 +222,7 @@ function copyShareLink() {
         </button>
       </div>
     </div>
-    <div v-if="!rows.length" class="card empty">暂无明细，点下方新建</div>
+    <div v-if="!rows.length" class="card empty">暂无明细，点上方「新建一行」</div>
   </div>
 
   <div class="table-wrap card" style="padding: 0">
@@ -229,11 +260,6 @@ function copyShareLink() {
     @expire="onExpireDelete"
   />
 
-  <button class="btn btn-primary fab with-tabbar" type="button" @click="addEntry">
-    ＋ 新建一行
-  </button>
-  <div class="fab-space with-tabbar" />
-
   <section class="summary sticky-sum">
     <div class="sum-head">
       <h3>结算</h3>
@@ -263,20 +289,10 @@ function copyShareLink() {
       =
       <strong>{{ result.laborFee }}</strong>
     </div>
-    <div v-for="x in extras" :key="x.id" class="extra-row">
+    <div v-for="x in extras" :key="'sum-' + x.id" class="extra-row">
       <span>{{ x.name }} = {{ x.amount }}</span>
-      <button class="linkish" type="button" @click="removeExtra(x.id)">删除</button>
-    </div>
-    <div class="extra-add">
-      <input v-model="extraName" placeholder="零星名称" />
-      <input
-        v-model="extraAmount"
-        type="number"
-        inputmode="decimal"
-        placeholder="金额"
-      />
-      <button class="btn btn-ghost" type="button" @click="addExtra">加</button>
     </div>
     <div class="total">总计 {{ result.total }} 元</div>
   </section>
+  <div class="fab-space with-tabbar" />
 </template>

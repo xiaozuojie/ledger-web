@@ -16,6 +16,9 @@ const err = ref('')
 const toastVisible = ref(false)
 const toastMsg = ref('')
 const pendingDelete = ref(null)
+const showExtraForm = ref(false)
+const extraName = ref('')
+const extraAmount = ref('')
 
 const today = todayStr()
 
@@ -70,6 +73,31 @@ function editEntry(id) {
   router.push({ name: 'entry', query: { kind: 'mixed', id } })
 }
 
+function openExtraForm() {
+  showExtraForm.value = !showExtraForm.value
+}
+
+async function addExtra() {
+  try {
+    await api.addExtra(extraName.value, extraAmount.value)
+    extraName.value = ''
+    extraAmount.value = ''
+    showExtraForm.value = false
+    await refresh()
+  } catch (e) {
+    err.value = e.message
+  }
+}
+
+async function removeExtra(id) {
+  try {
+    await api.removeExtra(id)
+    await refresh()
+  } catch (e) {
+    err.value = e.message
+  }
+}
+
 function askDelete(row) {
   if (pendingDelete.value) return
   pendingDelete.value = row.raw
@@ -112,6 +140,31 @@ function onUndo() {
 
   <p v-if="err" class="err">{{ err }}</p>
 
+  <section class="card top-actions">
+    <div class="btn-row">
+      <button class="btn btn-primary" type="button" @click="addEntry">＋ 记一笔</button>
+      <button class="btn btn-ghost" type="button" @click="openExtraForm">
+        {{ showExtraForm ? '收起零星' : '＋ 添加零星' }}
+      </button>
+    </div>
+    <div v-if="showExtraForm" class="extra-panel">
+      <label>零星名称</label>
+      <input v-model="extraName" placeholder="如 门口做卫生" />
+      <label>金额</label>
+      <input v-model="extraAmount" type="number" inputmode="decimal" placeholder="0" />
+      <div class="btn-row">
+        <button class="btn btn-ghost" type="button" @click="showExtraForm = false">取消</button>
+        <button class="btn btn-primary" type="button" @click="addExtra">确认添加</button>
+      </div>
+    </div>
+    <div v-if="extras.length" class="extra-list-top">
+      <div v-for="x in extras" :key="x.id" class="extra-row">
+        <span>{{ x.name }} = {{ x.amount }}</span>
+        <button class="linkish" type="button" @click="removeExtra(x.id)">删除</button>
+      </div>
+    </div>
+  </section>
+
   <div class="day-strip card">
     <div class="day-stat">
       <span class="k">今日车次</span>
@@ -153,13 +206,10 @@ function onUndo() {
       </div>
     </div>
     <div v-if="!todayRows.length" class="card empty">
-      今天还没记。点下方「记一笔」，按纸面补一行即可。
+      今天还没记。点上方「记一笔」即可。
     </div>
   </div>
 
-  <button class="btn btn-primary fab with-tabbar" type="button" @click="addEntry">
-    ＋ 记一笔
-  </button>
   <div class="fab-space with-tabbar" />
 
   <UndoToast

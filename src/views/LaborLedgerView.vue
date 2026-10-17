@@ -25,6 +25,7 @@ const previewSrc = ref('')
 const toastVisible = ref(false)
 const toastMsg = ref('')
 const pendingDelete = ref(null)
+const showExtraForm = ref(false)
 
 const result = computed(() =>
   computeLabor({
@@ -118,10 +119,15 @@ async function addExtra() {
     await api.addExtra(extraName.value, extraAmount.value)
     extraName.value = ''
     extraAmount.value = ''
+    showExtraForm.value = false
     await refresh()
   } catch (e) {
     err.value = e.message
   }
+}
+
+function openExtraForm() {
+  showExtraForm.value = !showExtraForm.value
 }
 
 async function removeExtra(id) {
@@ -198,6 +204,31 @@ function logout() {
   </header>
   <p v-if="err" class="err">{{ err }}</p>
 
+  <section class="card top-actions">
+    <div class="btn-row">
+      <button class="btn btn-primary" type="button" @click="addEntry">＋ 新建一行</button>
+      <button class="btn btn-ghost" type="button" @click="openExtraForm">
+        {{ showExtraForm ? '收起零星' : '＋ 添加零星' }}
+      </button>
+    </div>
+    <div v-if="showExtraForm" class="extra-panel">
+      <label>零星名称</label>
+      <input v-model="extraName" placeholder="如 材料费" />
+      <label>金额</label>
+      <input v-model="extraAmount" type="number" inputmode="decimal" placeholder="0" />
+      <div class="btn-row">
+        <button class="btn btn-ghost" type="button" @click="showExtraForm = false">取消</button>
+        <button class="btn btn-primary" type="button" @click="addExtra">确认添加</button>
+      </div>
+    </div>
+    <div v-if="extras.length" class="extra-list-top">
+      <div v-for="x in extras" :key="x.id" class="extra-row">
+        <span>{{ x.name }} = {{ x.amount }}</span>
+        <button class="linkish" type="button" @click="removeExtra(x.id)">删除</button>
+      </div>
+    </div>
+  </section>
+
   <!-- always：避免宽屏 media 把列表藏掉却无表格 -->
   <div class="entry-list always">
     <div v-for="row in detailRows" :key="row.id" class="entry-card">
@@ -217,7 +248,7 @@ function logout() {
       </div>
     </div>
     <div v-if="!detailRows.length" class="card empty">
-      暂无每日明细，点下方「新建一行」开始记
+      暂无每日明细，点上方「新建一行」开始记
     </div>
   </div>
 
@@ -256,11 +287,6 @@ function logout() {
     @expire="onExpireDelete"
   />
 
-  <button class="btn btn-primary fab with-tabbar" type="button" @click="addEntry">
-    ＋ 新建一行
-  </button>
-  <div class="fab-space with-tabbar" />
-
   <section class="summary">
     <h3>结算汇总</h3>
     <div class="sum-line sum-line-wrap">
@@ -275,20 +301,20 @@ function logout() {
       <span>=</span>
       <strong>{{ result.laborFee }}</strong>
     </div>
-    <div v-for="x in extras" :key="x.id" class="extra-row">
+    <div v-for="x in extras" :key="'sum-' + x.id" class="extra-row">
       <span>{{ x.name }} = {{ x.amount }}</span>
-      <button class="linkish" type="button" @click="removeExtra(x.id)">删除</button>
     </div>
-    <label>零星名称</label>
-    <input v-model="extraName" placeholder="名称" />
-    <label>金额</label>
-    <input v-model="extraAmount" type="number" inputmode="decimal" placeholder="0" />
-    <div class="btn-row">
-      <button class="btn btn-ghost" type="button" @click="addExtra">添加零星</button>
-      <button class="btn btn-primary" type="button" @click="saveRates">保存单价</button>
-    </div>
+    <button
+      class="btn btn-primary btn-block"
+      type="button"
+      style="margin-top: 10px"
+      @click="saveRates"
+    >
+      保存单价
+    </button>
     <div class="total">总计 {{ result.total }} 元</div>
   </section>
+  <div class="fab-space with-tabbar" />
 
   <div class="card btn-row" style="margin-top: 14px">
     <button class="btn btn-primary" type="button" @click="exportXls">导出表格</button>

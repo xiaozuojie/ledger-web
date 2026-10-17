@@ -472,6 +472,30 @@ table.sheet th {
   display: block;
 }
 
+.top-actions {
+  margin-bottom: 12px;
+}
+
+.top-actions .btn-row {
+  margin: 0;
+}
+
+.top-actions .extra-panel {
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px dashed var(--border);
+}
+
+.top-actions .extra-panel .btn-row {
+  margin-top: 4px;
+}
+
+.top-actions .extra-list-top {
+  margin-top: 10px;
+  padding-top: 8px;
+  border-top: 1px dashed var(--border);
+}
+
 .day-strip {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
