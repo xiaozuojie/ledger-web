@@ -23,11 +23,16 @@ const autoTotal = computed(() =>
 const trucks = ref('')
 const laborNote = ref('')
 const laborNoteTouched = ref(false)
+/** 当日零星（随本行保存） */
+const dayExtras = ref([])
 const extraName = ref('')
 const extraAmount = ref('')
 const kind = computed(() => route.query.kind || 'mixed')
 const entryId = computed(() => route.query.id || '')
 const hint = ref('')
+const dayExtrasTotal = computed(() =>
+  dayExtras.value.reduce((s, x) => s + (Number(x.amount) || 0), 0)
+)
 
 const truckStep = computed({
   get() {
@@ -63,6 +68,11 @@ onMounted(async () => {
     }
     trucks.value = (row.fields && row.fields.trucks) || ''
     laborNote.value = (row.fields && row.fields.laborNote) || ''
+    dayExtras.value = (row.extras || []).map((x) => ({
+      id: x.id || crypto.randomUUID(),
+      name: x.name || '零星',
+      amount: Number(x.amount) || 0
+    }))
   } catch (e) {
     err.value = e.message
   }
@@ -153,7 +163,12 @@ async function save() {
       groups: mapped,
       overrideTotal: override,
       fields,
-      summary: note
+      summary: note,
+      extras: dayExtras.value.map((x) => ({
+        id: x.id,
+        name: x.name,
+        amount: Number(x.amount) || 0
+      }))
     })
     router.push(ledgerHomeRoute())
   } catch (e) {
@@ -161,6 +176,23 @@ async function save() {
   } finally {
     saving.value = false
   }
+}
+
+function addDayExtra() {
+  const name = String(extraName.value || '').trim() || '零星'
+  const amount = Number(extraAmount.value) || 0
+  dayExtras.value.push({
+    id: crypto.randomUUID(),
+    name,
+    amount
+  })
+  extraName.value = ''
+  extraAmount.value = ''
+  hint.value = '已加入当日零星，点「保存」后计入汇总'
+}
+
+function removeDayExtra(id) {
+  dayExtras.value = dayExtras.value.filter((x) => x.id !== id)
 }
 
 async function remove() {
@@ -174,16 +206,6 @@ async function remove() {
   }
 }
 
-async function addExtra() {
-  try {
-    await api.addExtra(extraName.value, extraAmount.value)
-    extraName.value = ''
-    extraAmount.value = ''
-    hint.value = '已加入零星（账本级）'
-  } catch (e) {
-    err.value = e.message
-  }
-}
 </script>
 
 <template>
@@ -280,14 +302,21 @@ async function addExtra() {
     />
   </div>
   <div class="card">
-    <h3>收成零星</h3>
-    <p class="muted" style="margin-top: -6px">固定金额，不计入人天（账本级）</p>
+    <h3>当日零星</h3>
+    <p class="muted" style="margin-top: -6px">
+      跟这一天绑定；保存本行后计入汇总。不计入人天。
+    </p>
+    <div v-for="x in dayExtras" :key="x.id" class="extra-row">
+      <span>{{ x.name }} = {{ x.amount }}</span>
+      <button class="linkish" type="button" @click="removeDayExtra(x.id)">删除</button>
+    </div>
+    <p v-if="dayExtras.length" class="muted">当日零星小计 {{ dayExtrasTotal }} 元</p>
     <label>名称</label>
     <input v-model="extraName" placeholder="如 门口做卫生" />
     <label>金额</label>
     <input v-model="extraAmount" type="number" inputmode="decimal" placeholder="0" />
-    <button class="btn btn-ghost btn-block" type="button" @click="addExtra">
-      加入零星
+    <button class="btn btn-ghost btn-block" type="button" @click="addDayExtra">
+      加入当日零星
     </button>
   </div>
   <div class="btn-row">

@@ -111,7 +111,10 @@ function exportXls() {
     '做卫生人工费',
     `${r.workDays} 人天 × ${r.laborUnitPrice} 元/人天 = ${r.laborFee}`
   ])
-  extras.value.forEach((x) => table.push([x.name, x.amount]))
+  if (Number(r.dayExtrasSum) > 0) {
+    table.push(['各日零星合计', r.dayExtrasSum])
+  }
+  extras.value.forEach((x) => table.push([`整本·${x.name}`, x.amount]))
   table.push(['总计', r.total])
   downloadHtmlXls(table, (ledger.value && ledger.value.name) || '结算')
 }
@@ -138,6 +141,7 @@ async function shareImage() {
         workDays: r.workDays,
         laborUnitPrice: r.laborUnitPrice,
         laborFee: r.laborFee,
+        dayExtrasSum: r.dayExtrasSum,
         extras: extras.value,
         total: r.total
       }

@@ -4,7 +4,7 @@ import { useRouter } from 'vue-router'
 import * as api from '../api/ledgerApi.js'
 import { getSession } from '../lib/session.js'
 import { rowWorkDays } from '../calc/hours.js'
-import { computeMixed } from '../calc/settlement.js'
+import { computeMixed, entryExtrasSum } from '../calc/settlement.js'
 import UndoToast from '../components/UndoToast.vue'
 
 const sessionInvite = () => getSession()?.invite_slug
@@ -30,7 +30,8 @@ const rows = computed(() =>
     date: e.date,
     trucks: (e.fields && e.fields.trucks) || '',
     laborNote: (e.fields && e.fields.laborNote) || e.summary || '',
-    workDays: rowWorkDays(e)
+    workDays: rowWorkDays(e),
+    dayExtras: entryExtrasSum(e)
   }))
 )
 
@@ -182,11 +183,14 @@ function copyShareLink() {
     <div class="btn-row">
       <button class="btn btn-primary" type="button" @click="addEntry">＋ 新建一行</button>
       <button class="btn btn-ghost" type="button" @click="openExtraForm">
-        {{ showExtraForm ? '收起零星' : '＋ 添加零星' }}
+        {{ showExtraForm ? '收起整本零星' : '＋ 整本零星' }}
       </button>
     </div>
+    <p class="muted" style="margin: 8px 0 0">
+      当日零星在「新建/编辑一行」里加；此处为不跟日期的整本零星。
+    </p>
     <div v-if="showExtraForm" class="extra-panel">
-      <label>零星名称</label>
+      <label>整本零星名称</label>
       <input v-model="extraName" placeholder="如 门口做卫生" />
       <label>金额</label>
       <input v-model="extraAmount" type="number" inputmode="decimal" placeholder="0" />
@@ -197,7 +201,7 @@ function copyShareLink() {
     </div>
     <div v-if="extras.length" class="extra-list-top">
       <div v-for="x in extras" :key="x.id" class="extra-row">
-        <span>{{ x.name }} = {{ x.amount }}</span>
+        <span>整本 · {{ x.name }} = {{ x.amount }}</span>
         <button class="linkish" type="button" @click="removeExtra(x.id)">删除</button>
       </div>
     </div>
@@ -214,6 +218,7 @@ function copyShareLink() {
       </div>
       <div class="meta" @click="editEntry(row.id)">
         {{ row.laborNote || '（无人工说明）' }}
+        <template v-if="row.dayExtras"> · 当日零星 {{ row.dayExtras }}</template>
       </div>
       <div class="card-actions">
         <button class="btn btn-ghost" type="button" @click="editEntry(row.id)">编辑</button>
@@ -289,8 +294,11 @@ function copyShareLink() {
       =
       <strong>{{ result.laborFee }}</strong>
     </div>
+    <div v-if="result.dayExtrasSum" class="extra-row">
+      <span>各日零星合计 = {{ result.dayExtrasSum }}</span>
+    </div>
     <div v-for="x in extras" :key="'sum-' + x.id" class="extra-row">
-      <span>{{ x.name }} = {{ x.amount }}</span>
+      <span>整本 · {{ x.name }} = {{ x.amount }}</span>
     </div>
     <div class="total">总计 {{ result.total }} 元</div>
   </section>

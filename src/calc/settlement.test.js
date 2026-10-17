@@ -23,6 +23,31 @@ describe('mixed settlement', () => {
     expect(r.truckFee).toBe(1300)
     expect(r.laborFee).toBe(4255)
     expect(r.extrasSum).toBe(330)
+    expect(r.dayExtrasSum).toBe(0)
+    expect(r.bookExtrasSum).toBe(330)
     expect(r.total).toBe(5885)
+  })
+
+  it('sums per-day extras into total', () => {
+    const r = computeMixed({
+      entries: [
+        {
+          fields: { trucks: '1车' },
+          overrideTotal: 1,
+          extras: [{ name: '门口', amount: 50 }]
+        },
+        {
+          fields: { trucks: '0' },
+          overrideTotal: 1,
+          extras: [{ name: '材料', amount: 30 }]
+        }
+      ],
+      rates: { truckUnitPrice: 100, laborUnitPrice: 200 },
+      extras: [{ name: '整本', amount: 20 }]
+    })
+    expect(r.dayExtrasSum).toBe(80)
+    expect(r.bookExtrasSum).toBe(20)
+    expect(r.extrasSum).toBe(100)
+    expect(r.total).toBe(1 * 100 + 2 * 200 + 100)
   })
 })

@@ -328,9 +328,16 @@ export function paintMixedSettlementSheet(canvas, payload) {
     formula: `${r.workDays ?? 0} 人天 × ${r.laborUnitPrice ?? 0} 元/人天`,
     amount: money(r.laborFee)
   })
+  if (Number(r.dayExtrasSum) > 0) {
+    feeRows.push({
+      label: '各日零星合计',
+      formula: '',
+      amount: money(r.dayExtrasSum)
+    })
+  }
   extras.forEach((x) => {
     feeRows.push({
-      label: x.name || '零星',
+      label: `整本·${x.name || '零星'}`,
       formula: '',
       amount: money(x.amount)
     })
@@ -490,13 +497,22 @@ function paintLaborTable(canvas, _mapped, rows, r, extras, title) {
       label: '人工费',
       formula: `${r.workDays} 工日 × ${r.unitPrice ?? r.laborUnitPrice} 元/工日`,
       amount: money(r.laborFee)
-    },
-    ...extras.map((x) => ({
-      label: x.name || '零星',
+    }
+  ]
+  if (Number(r.dayExtrasSum) > 0) {
+    feeRows.push({
+      label: '各日零星合计',
+      formula: '',
+      amount: money(r.dayExtrasSum)
+    })
+  }
+  extras.forEach((x) => {
+    feeRows.push({
+      label: `整本·${x.name || '零星'}`,
       formula: '',
       amount: money(x.amount)
-    }))
-  ]
+    })
+  })
 
   const titleBlock = 52
   const sumH = measureSummaryHeight(measureCtx, colW, feeRows)

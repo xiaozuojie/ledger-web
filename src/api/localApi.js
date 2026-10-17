@@ -216,15 +216,28 @@ export async function updateRates(rates) {
   return { ok: true, rates }
 }
 
+function normalizeExtras(list) {
+  return (list || []).map((x) => ({
+    id: x.id || uid(),
+    name: x.name || '零星',
+    amount: Number(x.amount) || 0
+  }))
+}
+
 function normalizeEntry(e) {
+  const fields = e.fields || {}
+  const extras = normalizeExtras(
+    e.extras || fields.dayExtras || fields.extras || []
+  )
   return {
     _id: e.id,
     id: e.id,
     date: e.date,
-    fields: e.fields || {},
+    fields,
     groups: e.groups || [],
     overrideTotal: e.override_total != null ? Number(e.override_total) : null,
-    summary: e.summary || ''
+    summary: e.summary || '',
+    extras
   }
 }
 
@@ -241,11 +254,14 @@ export async function upsertEntry(payload) {
   const s = requireSession()
   const db = loadDb()
   const list = db.entries[s.ledger_id] || (db.entries[s.ledger_id] = [])
+  const dayExtras = normalizeExtras(payload.extras)
+  const fields = { ...(payload.fields || {}), dayExtras }
   const body = {
     id: payload.id || uid(),
     date: payload.date,
-    fields: payload.fields || {},
+    fields,
     groups: payload.groups || [],
+    extras: dayExtras,
     override_total:
       payload.overrideTotal != null && payload.overrideTotal !== ''
         ? Number(payload.overrideTotal)

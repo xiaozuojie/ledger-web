@@ -3,7 +3,7 @@ import { computed, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import * as api from '../api/ledgerApi.js'
 import { rowWorkDays } from '../calc/hours.js'
-import { computeMixed } from '../calc/settlement.js'
+import { computeMixed, entryExtrasSum } from '../calc/settlement.js'
 import { parseTruckCount } from '../calc/trucks.js'
 import { todayStr } from '../utils/date.js'
 import UndoToast from '../components/UndoToast.vue'
@@ -31,6 +31,7 @@ const todayRows = computed(() =>
       trucks: (e.fields && e.fields.trucks) || '',
       laborNote: (e.fields && e.fields.laborNote) || e.summary || '',
       workDays: rowWorkDays(e),
+      dayExtras: entryExtrasSum(e),
       raw: e
     }))
 )
@@ -144,11 +145,14 @@ function onUndo() {
     <div class="btn-row">
       <button class="btn btn-primary" type="button" @click="addEntry">＋ 记一笔</button>
       <button class="btn btn-ghost" type="button" @click="openExtraForm">
-        {{ showExtraForm ? '收起零星' : '＋ 添加零星' }}
+        {{ showExtraForm ? '收起整本零星' : '＋ 整本零星' }}
       </button>
     </div>
+    <p class="muted" style="margin: 8px 0 0">
+      当日零星请点「记一笔 / 编辑」在行内添加。
+    </p>
     <div v-if="showExtraForm" class="extra-panel">
-      <label>零星名称</label>
+      <label>整本零星名称</label>
       <input v-model="extraName" placeholder="如 门口做卫生" />
       <label>金额</label>
       <input v-model="extraAmount" type="number" inputmode="decimal" placeholder="0" />
@@ -159,7 +163,7 @@ function onUndo() {
     </div>
     <div v-if="extras.length" class="extra-list-top">
       <div v-for="x in extras" :key="x.id" class="extra-row">
-        <span>{{ x.name }} = {{ x.amount }}</span>
+        <span>整本 · {{ x.name }} = {{ x.amount }}</span>
         <button class="linkish" type="button" @click="removeExtra(x.id)">删除</button>
       </div>
     </div>
@@ -195,6 +199,7 @@ function onUndo() {
       </div>
       <div class="meta" @click="editEntry(row.id)">
         {{ row.laborNote || '（无人工说明）' }}
+        <template v-if="row.dayExtras"> · 当日零星 {{ row.dayExtras }}</template>
       </div>
       <div class="card-actions">
         <button class="btn btn-ghost" type="button" @click="editEntry(row.id)">

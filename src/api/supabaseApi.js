@@ -63,24 +63,43 @@ export async function updateRates(rates) {
 
 export async function listEntries() {
   const rows = (await rpc('api_list_entries', { p_token: getToken() })) || []
-  return rows.map((e) => ({
-    _id: e.id,
-    id: e.id,
-    date: e.date,
-    fields: e.fields || {},
-    groups: e.groups || [],
-    overrideTotal:
-      e.override_total != null ? Number(e.override_total) : null,
-    summary: e.summary || ''
-  }))
+  return rows.map((e) => {
+    const fields = e.fields || {}
+    const extras = Array.isArray(e.extras)
+      ? e.extras
+      : Array.isArray(fields.dayExtras)
+        ? fields.dayExtras
+        : []
+    return {
+      _id: e.id,
+      id: e.id,
+      date: e.date,
+      fields,
+      groups: e.groups || [],
+      overrideTotal:
+        e.override_total != null ? Number(e.override_total) : null,
+      summary: e.summary || '',
+      extras: extras.map((x) => ({
+        id: x.id,
+        name: x.name || '零星',
+        amount: Number(x.amount) || 0
+      }))
+    }
+  })
 }
 
 export async function upsertEntry(payload) {
+  const dayExtras = (payload.extras || []).map((x) => ({
+    id: x.id,
+    name: x.name || '零星',
+    amount: Number(x.amount) || 0
+  }))
+  const fields = { ...(payload.fields || {}), dayExtras }
   return rpc('api_upsert_entry', {
     p_token: getToken(),
     p_entry_id: payload.id || null,
     p_date: payload.date,
-    p_fields: payload.fields || {},
+    p_fields: fields,
     p_groups: payload.groups || [],
     p_override_total:
       payload.overrideTotal != null && payload.overrideTotal !== ''
