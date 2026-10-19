@@ -70,7 +70,15 @@ export async function createLedgerByMode({ name, mode }) {
 }
 
 export async function getLedger() {
-  return rpc('api_get_ledger', { p_token: getToken() })
+  const led = await rpc('api_get_ledger', { p_token: getToken() })
+  const kind = led.settlement_kind || 'mixed'
+  if (kind === 'personal') return { ...led, feeTypes: [], feeGroups: [] }
+  const { normalizeFeeTypes, normalizeFeeGroups } = await import('../calc/feeTypes.js')
+  return {
+    ...led,
+    feeGroups: normalizeFeeGroups(led.feeGroups),
+    feeTypes: normalizeFeeTypes(led.feeTypes, kind)
+  }
 }
 
 export async function updateRates(rates) {
@@ -166,31 +174,111 @@ export async function updateTemplate({ id, name, fields, settlement }) {
   })
 }
 
-/** 云端尚未建 feeTypes 表：首页汇总 / 类型管理仅本地模式完整支持 */
 export async function listAllLedgerBundles() {
   throw new Error('云端模式暂不支持首页全量汇总，请用本地模式或稍后升级')
 }
 
+async function saveFeeCatalog(feeTypes, feeGroups) {
+  return rpc('api_save_fee_catalog', {
+    p_token: getToken(),
+    p_fee_types: feeTypes,
+    p_fee_groups: feeGroups
+  })
+}
+
 export async function listFeeTypes() {
+  return (await getLedger()).feeTypes
+}
+
+export async function addFeeType(payload) {
+  const {
+    normalizeFeeTypes,
+    normalizeFeeGroups
+  } = await import('../calc/feeTypes.js')
   const led = await getLedger()
-  const { defaultFeeTypes, normalizeFeeTypes } = await import(
+  const name = String(payload?.name || '').trim()
+  if (!name) throw new Error('请填写类型名称')
+  const kind = payload?.kind === 'fixed' ? 'fixed' : 'qty'
+  const row = {
+    id: crypto.randomUUID(),
+    name,
+    kind,
+    unit: String(payload?.unit || (kind === 'fixed' ? '元' : '次')).trim(),
+    unitPrice: kind === 'qty' ? Number(payload?.unitPrice) || 0 : null,
+    builtin: false,
+    enabled: true,
+    groupId: String(payload?.groupId || 'g_misc'),
+    icon: payload?.icon || '📌'
+  }
+  const feeTypes = normalizeFeeTypes([...(led.feeTypes || []), row], led.settlement_kind)
+  const feeGroups = normalizeFeeGroups(led.feeGroups)
+  await saveFeeCatalog(feeTypes, feeGroups)
+  return row
+}
+
+export async function updateFeeType(id, patch) {
+  const { normalizeFeeTypes, normalizeFeeGroups } = await import('../calc/feeTypes.js')
+  const led = await getLedger()
+  const list = normalizeFeeTypes(led.feeTypes, led.settlement_kind)
+  const idx = list.findIndex((t) => t.id === id)
+  if (idx < 0) throw new Error('类型不存在')
+  const cur = { ...list[idx] }
+  if (patch.name != null) cur.name = String(patch.name).trim() || cur.name
+  if (patch.unit != null) cur.unit = String(patch.unit)
+  if (patch.unitPrice != null && patch.unitPrice !== '') cur.unitPrice = Number(patch.unitPrice)
+  if (patch.enabled != null) cur.enabled = Boolean(patch.enabled)
+  if (patch.kind != null && !cur.builtin) cur.kind = patch.kind === 'fixed' ? 'fixed' : 'qty'
+  if (patch.groupId != null) cur.groupId = String(patch.groupId)
+  if (patch.icon != null) cur.icon = patch.icon
+  list[idx] = cur
+  const feeTypes = normalizeFeeTypes(list, led.settlement_kind)
+  await saveFeeCatalog(feeTypes, normalizeFeeGroups(led.feeGroups))
+  return feeTypes.find((t) => t.id === id)
+}
+
+export async function removeFeeType(id) {
+  const { normalizeFeeTypes, normalizeFeeGroups } = await import('../calc/feeTypes.js')
+  const led = await getLedger()
+  const list = normalizeFeeTypes(led.feeTypes, led.settlement_kind)
+  const t = list.find((x) => x.id === id)
+  if (!t) throw new Error('类型不存在')
+  if (t.builtin) throw new Error('内置类型不可删除')
+  await saveFeeCatalog(
+    list.filter((x) => x.id !== id),
+    normalizeFeeGroups(led.feeGroups)
+  )
+  return { ok: true }
+}
+
+export async function addFeeGroup(name) {
+  const { addFeeGroup: addPure, normalizeFeeGroups, normalizeFeeTypes } = await import(
     '../calc/feeTypes.js'
   )
-  return normalizeFeeTypes(led.feeTypes, led.settlement_kind || 'mixed').length
-    ? normalizeFeeTypes(led.feeTypes, led.settlement_kind || 'mixed')
-    : defaultFeeTypes(led.settlement_kind || 'mixed')
+  const led = await getLedger()
+  const feeGroups = addPure(normalizeFeeGroups(led.feeGroups), name, 'g_' + crypto.randomUUID())
+  await saveFeeCatalog(normalizeFeeTypes(led.feeTypes, led.settlement_kind), feeGroups)
+  return feeGroups
 }
 
-export async function addFeeType() {
-  throw new Error('云端模式暂不支持自定义计费类型')
+export async function renameFeeGroup(id, name) {
+  const { renameFeeGroup: renamePure, normalizeFeeGroups, normalizeFeeTypes } = await import(
+    '../calc/feeTypes.js'
+  )
+  const led = await getLedger()
+  const feeGroups = renamePure(normalizeFeeGroups(led.feeGroups), id, name)
+  await saveFeeCatalog(normalizeFeeTypes(led.feeTypes, led.settlement_kind), feeGroups)
+  return feeGroups
 }
 
-export async function updateFeeType() {
-  throw new Error('云端模式暂不支持自定义计费类型')
-}
-
-export async function removeFeeType() {
-  throw new Error('云端模式暂不支持自定义计费类型')
+export async function removeFeeGroup(id) {
+  const { removeFeeGroup: removePure, normalizeFeeGroups, normalizeFeeTypes } = await import(
+    '../calc/feeTypes.js'
+  )
+  const led = await getLedger()
+  const types = normalizeFeeTypes(led.feeTypes, led.settlement_kind)
+  const feeGroups = removePure(normalizeFeeGroups(led.feeGroups), types, id)
+  await saveFeeCatalog(types, feeGroups)
+  return feeGroups
 }
 
 export async function updateBudget() {

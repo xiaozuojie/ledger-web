@@ -993,3 +993,30 @@ table.sheet th {
 .type-picker button {
   text-align: left;
 }
+.type-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+.type-tile {
+  text-align: left;
+  background: #fff;
+  border: 1px solid var(--line, #e4ecef);
+  border-radius: 14px;
+  padding: 12px;
+  min-height: 96px;
+}
+.type-ico { font-size: 28px; display: block; }
+.type-name { font-weight: 700; display: block; margin-top: 4px; }
+.icon-pick { display: flex; flex-wrap: wrap; gap: 6px; }
+.icon-pick button {
+  font-size: 22px;
+  min-width: 40px;
+  min-height: 40px;
+  border-radius: 10px;
+  border: 1px solid #e4ecef;
+  background: #fff;
+}
+.icon-pick button.selected { outline: 2px solid var(--brand, #0b6e99); }
+.group-row { display: flex; gap: 8px; align-items: center; margin-bottom: 8px; }
+.group-row input { flex: 1; }

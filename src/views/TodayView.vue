@@ -226,7 +226,7 @@ const tipCtx = computed(() => ({
         type="button"
         @click="pickFeeType(t)"
       >
-        {{ t.name }}
+        {{ t.icon || '📌' }} {{ t.name }}
       </button>
     </div>
     <div v-if="showMore" class="muted" style="margin-top: 10px">

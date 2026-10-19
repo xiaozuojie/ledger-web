@@ -5,7 +5,11 @@
 import {
   defaultFeeTypes,
   normalizeFeeTypes,
-  feeTypesOfLedger
+  normalizeFeeGroups,
+  feeTypesOfLedger,
+  addFeeGroup as addFeeGroupPure,
+  renameFeeGroup as renameFeeGroupPure,
+  removeFeeGroup as removeFeeGroupPure
 } from '../calc/feeTypes.js'
 import {
   defaultPersonalCategories,
@@ -229,6 +233,7 @@ export async function createLedger({ name, templateId }) {
     settlement_kind: kind,
     rates,
     feeTypes: kind === 'personal' ? [] : defaultFeeTypes(kind),
+    feeGroups: kind === 'personal' ? [] : normalizeFeeGroups([]),
     categories:
       kind === 'personal' ? defaultPersonalCategories() : undefined,
     budget:
@@ -313,9 +318,12 @@ export async function getLedger() {
     saveDb(db)
   } else if (!led.feeTypes?.length) {
     led.feeTypes = defaultFeeTypes(kind)
+    led.feeGroups = normalizeFeeGroups(led.feeGroups)
     saveDb(db)
   } else {
     led.feeTypes = normalizeFeeTypes(led.feeTypes, kind)
+    led.feeGroups = normalizeFeeGroups(led.feeGroups)
+    saveDb(db)
   }
   return {
     id: led.id,
@@ -324,6 +332,7 @@ export async function getLedger() {
     settlement_kind: kind,
     rates: led.rates,
     feeTypes: led.feeTypes || [],
+    feeGroups: led.feeGroups || [],
     categories: led.categories,
     budget: led.budget,
     accounts: led.accounts,
@@ -400,7 +409,9 @@ export async function addFeeType(payload) {
     unit: String(payload?.unit || (kind === 'fixed' ? '元' : '次')).trim(),
     unitPrice: kind === 'qty' ? Number(payload?.unitPrice) || 0 : null,
     builtin: false,
-    enabled: true
+    enabled: true,
+    groupId: String(payload?.groupId || 'g_misc'),
+    icon: payload?.icon || '📌'
   }
   const list = normalizeFeeTypes(
     [...(led.feeTypes || defaultFeeTypes(led.settlement_kind)), row],
@@ -433,7 +444,9 @@ export async function updateFeeType(id, patch) {
   if (patch.kind != null && !cur.builtin) {
     cur.kind = patch.kind === 'fixed' ? 'fixed' : 'qty'
   }
-  led.feeTypes = list
+  if (patch.groupId != null) cur.groupId = String(patch.groupId)
+  if (patch.icon != null) cur.icon = patch.icon
+  led.feeTypes = normalizeFeeTypes(list, led.settlement_kind)
   // 同步内置单价到 rates
   if (id === 'truck' && cur.unitPrice != null) {
     led.rates = { ...led.rates, truckUnitPrice: Number(cur.unitPrice) }
@@ -462,6 +475,39 @@ export async function removeFeeType(id) {
   led.updated_at = Date.now()
   saveDb(db)
   return { ok: true }
+}
+
+function requireLedger() {
+  const s = requireSession()
+  const db = loadDb()
+  const led = db.ledgers.find((l) => l.id === s.ledger_id)
+  if (!led) throw new Error('账本不存在')
+  return { db, led }
+}
+
+export async function addFeeGroup(name) {
+  const { db, led } = requireLedger()
+  led.feeGroups = addFeeGroupPure(normalizeFeeGroups(led.feeGroups), name, 'g_' + uid())
+  led.updated_at = Date.now()
+  saveDb(db)
+  return led.feeGroups
+}
+
+export async function renameFeeGroup(id, name) {
+  const { db, led } = requireLedger()
+  led.feeGroups = renameFeeGroupPure(normalizeFeeGroups(led.feeGroups), id, name)
+  led.updated_at = Date.now()
+  saveDb(db)
+  return led.feeGroups
+}
+
+export async function removeFeeGroup(id) {
+  const { db, led } = requireLedger()
+  const types = normalizeFeeTypes(led.feeTypes || [], led.settlement_kind)
+  led.feeGroups = removeFeeGroupPure(normalizeFeeGroups(led.feeGroups), types, id)
+  led.updated_at = Date.now()
+  saveDb(db)
+  return led.feeGroups
 }
 
 export async function updateRates(rates) {

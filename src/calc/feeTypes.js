@@ -10,6 +10,94 @@ export const BUILTIN_IDS = {
 /** 已废止的内置零星 id，normalize 时丢弃 */
 export const RETIRED_EXTRA_ID = 'extra'
 
+export const PRESET_ICONS = [
+  '🚚',
+  '🚛',
+  '🫧',
+  '🧹',
+  '👷',
+  '👤',
+  '📌',
+  '⛽',
+  '🧱',
+  '💧',
+  '🍽️',
+  '🅿️',
+  '🧰',
+  '📦',
+  '🚧',
+  '💰',
+  '🧾',
+  '🗑️'
+]
+
+export const DEFAULT_FEE_GROUPS = [
+  { id: 'g_vehicle', name: '车辆' },
+  { id: 'g_labor', name: '人工' },
+  { id: 'g_misc', name: '杂费' }
+]
+
+export function defaultGroupId(typeId) {
+  if (typeId === BUILTIN_IDS.truck) return 'g_vehicle'
+  if (typeId === BUILTIN_IDS.labor) return 'g_labor'
+  return 'g_misc'
+}
+
+export function defaultIcon(typeId) {
+  if (typeId === BUILTIN_IDS.truck) return '🚚'
+  if (typeId === BUILTIN_IDS.labor) return '🧹'
+  return '📌'
+}
+
+export function normalizeFeeGroups(list) {
+  const custom = []
+  const nameById = new Map()
+  for (const raw of list || []) {
+    if (!raw || !raw.id) continue
+    const id = String(raw.id)
+    const name = String(raw.name || '').trim()
+    if (!name) continue
+    if (DEFAULT_FEE_GROUPS.some((g) => g.id === id)) nameById.set(id, name)
+    else if (!custom.some((g) => g.id === id)) custom.push({ id, name })
+  }
+  return [
+    ...DEFAULT_FEE_GROUPS.map((g) => ({
+      id: g.id,
+      name: nameById.get(g.id) || g.name
+    })),
+    ...custom
+  ]
+}
+
+export function filterFeeTypes(list, query) {
+  const q = String(query || '').trim().toLowerCase()
+  if (!q) return list || []
+  return (list || []).filter((t) => String(t.name || '').toLowerCase().includes(q))
+}
+
+export function addFeeGroup(groups, name, id) {
+  const n = String(name || '').trim()
+  if (!n) throw new Error('请填写分组名称')
+  const list = normalizeFeeGroups(groups)
+  if (list.some((g) => g.name === n)) throw new Error('分组名称已存在')
+  return [...list, { id: String(id), name: n }]
+}
+
+export function renameFeeGroup(groups, id, name) {
+  const n = String(name || '').trim()
+  if (!n) throw new Error('请填写分组名称')
+  const list = normalizeFeeGroups(groups)
+  if (list.some((g) => g.id !== id && g.name === n)) throw new Error('分组名称已存在')
+  if (!list.some((g) => g.id === id)) throw new Error('分组不存在')
+  return list.map((g) => (g.id === id ? { ...g, name: n } : g))
+}
+
+export function removeFeeGroup(groups, types, id) {
+  if (DEFAULT_FEE_GROUPS.some((g) => g.id === id)) throw new Error('默认分组不能删除')
+  if ((types || []).some((t) => t.groupId === id)) throw new Error('分组里还有类型，不能删除')
+  return normalizeFeeGroups(groups).filter((g) => g.id !== id)
+}
+
 /**
  * @typedef {{
  *   id: string,
@@ -33,7 +121,9 @@ export function defaultFeeTypes(kind) {
       unit: '车',
       unitPrice: 100,
       builtin: true,
-      enabled: true
+      enabled: true,
+      groupId: 'g_vehicle',
+      icon: '🚚'
     },
     {
       id: BUILTIN_IDS.labor,
@@ -42,7 +132,9 @@ export function defaultFeeTypes(kind) {
       unit: '人天',
       unitPrice: laborPrice,
       builtin: true,
-      enabled: true
+      enabled: true,
+      groupId: 'g_labor',
+      icon: '🧹'
     }
   ]
 }
@@ -57,8 +149,16 @@ export function normalizeFeeTypes(list, kind = 'mixed') {
     if (raw.id === RETIRED_EXTRA_ID) continue
     const prev = byId.get(raw.id) || {}
     const kindVal = raw.kind || prev.kind || 'qty'
+    const typeId = String(raw.id)
+    const rawGroup = String(raw.groupId || prev.groupId || '')
+    const groupId = rawGroup.startsWith('g_') ? rawGroup : defaultGroupId(typeId)
+    const icon = PRESET_ICONS.includes(raw.icon)
+      ? raw.icon
+      : PRESET_ICONS.includes(prev.icon)
+        ? prev.icon
+        : defaultIcon(typeId)
     byId.set(raw.id, {
-      id: String(raw.id),
+      id: typeId,
       name: String(raw.name || prev.name || '未命名').trim() || '未命名',
       kind: ['qty', 'work_days', 'fixed'].includes(kindVal) ? kindVal : 'qty',
       unit: raw.unit != null ? String(raw.unit) : prev.unit || '次',
@@ -69,7 +169,9 @@ export function normalizeFeeTypes(list, kind = 'mixed') {
             ? Number(prev.unitPrice)
             : null,
       builtin: Boolean(prev.builtin || raw.builtin),
-      enabled: raw.enabled === false ? false : true
+      enabled: raw.enabled === false ? false : true,
+      groupId,
+      icon
     })
   }
   // 内置按默认顺序，其后自定义按出现顺序

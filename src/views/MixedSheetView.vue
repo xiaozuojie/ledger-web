@@ -198,7 +198,7 @@ function copyShareLink() {
         type="button"
         @click="pickFeeType(t)"
       >
-        {{ t.name }}
+        {{ t.icon || '📌' }} {{ t.name }}
         <span class="muted">
           ·
           {{
