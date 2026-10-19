@@ -1,5 +1,5 @@
 import { supabase, hasSupabase } from '../lib/supabase.js'
-import { getToken, setSession, clearSession } from '../lib/session.js'
+import { getToken, getSession, setSession, clearSession } from '../lib/session.js'
 import { signOut } from '../lib/auth.js'
 
 const TPL = {
@@ -15,6 +15,9 @@ function rpcError(err) {
   }
   if (/UNAUTHORIZED/i.test(msg)) {
     return new Error('会话已过期，请重新登录或从首页进入账本')
+  }
+  if (/FORBIDDEN/i.test(msg)) {
+    return new Error(msg.replace(/^.*FORBIDDEN\s*/i, '') || '没有权限')
   }
   if (/NOT_FOUND ledger/i.test(msg)) {
     return new Error('账本不存在或链接无效')
@@ -45,14 +48,17 @@ export async function createLedger({ name, templateId }) {
     p_template_id: templateId,
     p_passphrase: null
   })
-  setSession(data)
+  setSession({ ...data, role: data.role || 'owner' })
   return data
 }
 
-export async function openLedger(inviteSlug) {
-  const data = await rpc('open_ledger', { p_invite_slug: inviteSlug })
-  setSession(data)
-  return data
+export async function openLedger(inviteSlug, opts = {}) {
+  const args = { p_invite_slug: inviteSlug }
+  if (opts?.pin) args.p_pin = opts.pin
+  const data = await rpc('open_ledger', args)
+  const session = { ...data, role: data.role || (opts?.asOwner ? 'owner' : 'editor') }
+  setSession(session)
+  return session
 }
 
 export async function unlockLedger({ inviteSlug }) {
@@ -82,6 +88,7 @@ export async function getLedger() {
 }
 
 export async function updateRates(rates) {
+  assertWriter()
   return rpc('api_update_rates', { p_token: getToken(), p_rates: rates })
 }
 
@@ -112,7 +119,12 @@ export async function listEntries() {
   })
 }
 
+function assertWriter() {
+  if (getSession()?.role === 'viewer') throw new Error('你是查看成员，不能修改')
+}
+
 export async function upsertEntry(payload) {
+  assertWriter()
   const dayExtras = (payload.extras || []).map((x) => ({
     id: x.id,
     name: x.name || '零星',
@@ -134,6 +146,7 @@ export async function upsertEntry(payload) {
 }
 
 export async function removeEntry(entryId) {
+  assertWriter()
   return rpc('api_remove_entry', {
     p_token: getToken(),
     p_entry_id: entryId
@@ -191,6 +204,7 @@ export async function listFeeTypes() {
 }
 
 export async function addFeeType(payload) {
+  assertWriter()
   const {
     normalizeFeeTypes,
     normalizeFeeGroups
@@ -217,6 +231,7 @@ export async function addFeeType(payload) {
 }
 
 export async function updateFeeType(id, patch) {
+  assertWriter()
   const { normalizeFeeTypes, normalizeFeeGroups } = await import('../calc/feeTypes.js')
   const led = await getLedger()
   const list = normalizeFeeTypes(led.feeTypes, led.settlement_kind)
@@ -237,6 +252,7 @@ export async function updateFeeType(id, patch) {
 }
 
 export async function removeFeeType(id) {
+  assertWriter()
   const { normalizeFeeTypes, normalizeFeeGroups } = await import('../calc/feeTypes.js')
   const led = await getLedger()
   const list = normalizeFeeTypes(led.feeTypes, led.settlement_kind)
@@ -251,6 +267,7 @@ export async function removeFeeType(id) {
 }
 
 export async function addFeeGroup(name) {
+  assertWriter()
   const { addFeeGroup: addPure, normalizeFeeGroups, normalizeFeeTypes } = await import(
     '../calc/feeTypes.js'
   )
@@ -261,6 +278,7 @@ export async function addFeeGroup(name) {
 }
 
 export async function renameFeeGroup(id, name) {
+  assertWriter()
   const { renameFeeGroup: renamePure, normalizeFeeGroups, normalizeFeeTypes } = await import(
     '../calc/feeTypes.js'
   )
@@ -271,6 +289,7 @@ export async function renameFeeGroup(id, name) {
 }
 
 export async function removeFeeGroup(id) {
+  assertWriter()
   const { removeFeeGroup: removePure, normalizeFeeGroups, normalizeFeeTypes } = await import(
     '../calc/feeTypes.js'
   )
@@ -285,8 +304,31 @@ export async function updateBudget() {
   throw new Error('云端模式暂不支持月预算')
 }
 
-export async function bulkAddPersonalEntries() {
-  throw new Error('云端模式暂不支持批量记账')
+export async function bulkAddPersonalEntries(items, { date, accountId } = {}) {
+  assertWriter()
+  const led = await getLedger()
+  if (led.settlement_kind !== 'personal') throw new Error('仅个人账支持批量记入')
+  const day = date || new Date().toISOString().slice(0, 10)
+  const ids = []
+  for (const it of items || []) {
+    const amount = Math.abs(Number(it.amount) || 0)
+    if (!amount) continue
+    const fields = {
+      amount,
+      direction: it.direction === 'income' ? 'income' : 'expense',
+      categoryId: it.categoryId || 'other_out',
+      note: it.note || '',
+      accountId: accountId || it.accountId || null
+    }
+    const row = await upsertEntry({
+      date: it.date || day,
+      fields,
+      groups: [],
+      summary: fields.note || null
+    })
+    ids.push(row?.id || row?.entry_id || 'ok')
+  }
+  return { ids, count: ids.length }
 }
 export async function listAccounts() {
   return []
@@ -308,6 +350,28 @@ export async function removeGoal() {
 }
 export async function importPersonalCsv() {
   throw new Error('云端模式暂不支持 CSV 导入')
+}
+
+export async function setAccessMode(mode) {
+  await rpc('api_set_access', {
+    p_token: getToken(),
+    p_mode: mode === 'members' ? 'members' : 'link'
+  })
+  return { accessMode: mode === 'members' ? 'members' : 'link' }
+}
+
+export async function addMember({ email, role }) {
+  await rpc('api_invite_member', {
+    p_token: getToken(),
+    p_email: email,
+    p_role: role === 'viewer' ? 'viewer' : 'editor'
+  })
+  return (await getLedger()).members || []
+}
+
+export async function removeMember(id) {
+  await rpc('api_remove_member', { p_token: getToken(), p_user_id: id })
+  return (await getLedger()).members || []
 }
 
 export async function exportBackup() {

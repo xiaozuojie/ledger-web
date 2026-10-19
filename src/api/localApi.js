@@ -15,6 +15,12 @@ import {
   defaultPersonalCategories,
   normalizeCategories
 } from '../calc/personalCategories.js'
+import {
+  addMemberPure,
+  matchMember,
+  normalizeAccess,
+  removeMemberPure
+} from '../calc/members.js'
 import { validateBackup, wrapBackup } from '../utils/backup.js'
 
 const DB_KEY = 'ledger_web_local_db_v1'
@@ -179,6 +185,17 @@ function getSession() {
   }
 }
 
+function assertWriter() {
+  if (getSession()?.role === 'viewer') {
+    throw new Error('你是查看成员，不能修改')
+  }
+}
+
+function assertOwner() {
+  const role = getSession()?.role
+  if (role && role !== 'owner') throw new Error('只有账本主人可以管理成员')
+}
+
 function getToken() {
   return getSession()?.session_token || ''
 }
@@ -243,6 +260,8 @@ export async function createLedger({ name, templateId }) {
     accounts: kind === 'personal' ? defaultAccounts() : undefined,
     goals: kind === 'personal' ? [] : undefined,
     invite_slug: uid().replace(/-/g, '').slice(0, 10),
+    accessMode: 'link',
+    members: [],
     updated_at: Date.now()
   }
   db.ledgers.push(ledger)
@@ -254,7 +273,8 @@ export async function createLedger({ name, templateId }) {
     invite_slug: ledger.invite_slug,
     session_token: uid(),
     settlement_kind: kind,
-    name: ledger.name
+    name: ledger.name,
+    role: 'owner'
   }
   setSession(session)
   return session
@@ -271,10 +291,18 @@ export async function createLedgerByMode({ name, mode }) {
   return createLedger({ name, templateId })
 }
 
-export async function openLedger(inviteSlug) {
+export async function openLedger(inviteSlug, opts = {}) {
   const db = loadDb()
   const ledger = db.ledgers.find((l) => l.invite_slug === inviteSlug)
   if (!ledger) throw new Error('账本不存在或链接无效（本地模式：需在同一手机浏览器内创建）')
+  const access = normalizeAccess(ledger)
+  let role = 'editor'
+  if (opts.asOwner) role = 'owner'
+  else if (access.accessMode === 'members') {
+    const member = matchMember(access.members, opts.pin)
+    if (!member) throw new Error('这个账本只允许成员进入，请填写成员口令')
+    role = member.role
+  }
   ledger.updated_at = Date.now()
   saveDb(db)
   const session = {
@@ -282,7 +310,8 @@ export async function openLedger(inviteSlug) {
     invite_slug: ledger.invite_slug,
     session_token: uid(),
     settlement_kind: ledger.settlement_kind,
-    name: ledger.name
+    name: ledger.name,
+    role
   }
   setSession(session)
   return session
@@ -337,11 +366,14 @@ export async function getLedger() {
     budget: led.budget,
     accounts: led.accounts,
     goals: led.goals,
-    invite_slug: led.invite_slug
+    invite_slug: led.invite_slug,
+    accessMode: normalizeAccess(led).accessMode,
+    members: normalizeAccess(led).members
   }
 }
 
 export async function updateBudget(budget) {
+  assertWriter()
   const s = requireSession()
   const db = loadDb()
   const led = db.ledgers.find((l) => l.id === s.ledger_id)
@@ -395,6 +427,7 @@ export async function listFeeTypes() {
 }
 
 export async function addFeeType(payload) {
+  assertWriter()
   const s = requireSession()
   const db = loadDb()
   const led = db.ledgers.find((l) => l.id === s.ledger_id)
@@ -424,6 +457,7 @@ export async function addFeeType(payload) {
 }
 
 export async function updateFeeType(id, patch) {
+  assertWriter()
   const s = requireSession()
   const db = loadDb()
   const led = db.ledgers.find((l) => l.id === s.ledger_id)
@@ -460,6 +494,7 @@ export async function updateFeeType(id, patch) {
 }
 
 export async function removeFeeType(id) {
+  assertWriter()
   const s = requireSession()
   const db = loadDb()
   const led = db.ledgers.find((l) => l.id === s.ledger_id)
@@ -478,6 +513,7 @@ export async function removeFeeType(id) {
 }
 
 function requireLedger() {
+  assertWriter()
   const s = requireSession()
   const db = loadDb()
   const led = db.ledgers.find((l) => l.id === s.ledger_id)
@@ -511,6 +547,7 @@ export async function removeFeeGroup(id) {
 }
 
 export async function updateRates(rates) {
+  assertWriter()
   const s = requireSession()
   const db = loadDb()
   const led = db.ledgers.find((l) => l.id === s.ledger_id)
@@ -569,6 +606,7 @@ export async function listEntries() {
 }
 
 export async function upsertEntry(payload) {
+  assertWriter()
   const s = requireSession()
   const db = loadDb()
   const list = db.entries[s.ledger_id] || (db.entries[s.ledger_id] = [])
@@ -601,6 +639,7 @@ export async function upsertEntry(payload) {
 }
 
 export async function removeEntry(entryId) {
+  assertWriter()
   const s = requireSession()
   const db = loadDb()
   const list = db.entries[s.ledger_id] || []
@@ -614,6 +653,7 @@ export async function removeEntry(entryId) {
 
 /** 批量写入个人明细（一句话/导入） */
 export async function bulkAddPersonalEntries(items, { date, accountId } = {}) {
+  assertWriter()
   const s = requireSession()
   const db = loadDb()
   const led = db.ledgers.find((l) => l.id === s.ledger_id)
@@ -658,6 +698,7 @@ export async function listAccounts() {
 }
 
 export async function upsertAccount({ id, name, balance }) {
+  assertWriter()
   const s = requireSession()
   const db = loadDb()
   const led = db.ledgers.find((l) => l.id === s.ledger_id)
@@ -679,6 +720,7 @@ export async function upsertAccount({ id, name, balance }) {
 }
 
 export async function removeAccount(id) {
+  assertWriter()
   const s = requireSession()
   const db = loadDb()
   const led = db.ledgers.find((l) => l.id === s.ledger_id)
@@ -694,6 +736,7 @@ export async function listGoals() {
 }
 
 export async function upsertGoal({ id, name, target, current }) {
+  assertWriter()
   const s = requireSession()
   const db = loadDb()
   const led = db.ledgers.find((l) => l.id === s.ledger_id)
@@ -721,6 +764,7 @@ export async function upsertGoal({ id, name, target, current }) {
 }
 
 export async function removeGoal(id) {
+  assertWriter()
   const s = requireSession()
   const db = loadDb()
   const led = db.ledgers.find((l) => l.id === s.ledger_id)
@@ -808,6 +852,7 @@ export async function cloneTemplate(templateId, name) {
 }
 
 export async function updateTemplate({ id, name, fields, settlement }) {
+  assertWriter()
   requireSession()
   const db = loadDb()
   const t = db.templates.find((x) => x.id === id)
@@ -818,6 +863,39 @@ export async function updateTemplate({ id, name, fields, settlement }) {
   if (settlement) t.settlement = settlement
   saveDb(db)
   return { ok: true }
+}
+
+export async function setAccessMode(mode) {
+  assertOwner()
+  const { db, led } = requireLedger()
+  led.accessMode = mode === 'members' ? 'members' : 'link'
+  led.updated_at = Date.now()
+  saveDb(db)
+  return normalizeAccess(led)
+}
+
+export async function addMember(payload) {
+  assertOwner()
+  const { db, led } = requireLedger()
+  led.members = addMemberPure(led.members, {
+    id: `m_${uid()}`,
+    name: payload?.name,
+    pin: payload?.pin,
+    email: payload?.email,
+    role: payload?.role
+  })
+  led.updated_at = Date.now()
+  saveDb(db)
+  return normalizeAccess(led).members
+}
+
+export async function removeMember(id) {
+  assertOwner()
+  const { db, led } = requireLedger()
+  led.members = removeMemberPure(led.members, id)
+  led.updated_at = Date.now()
+  saveDb(db)
+  return led.members
 }
 
 /** 导出整库备份（对象，调用方序列化下载） */

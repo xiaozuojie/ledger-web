@@ -1,3 +1,5 @@
+import { mpToWebDb } from '../calc/mpBridge.js'
+
 /**
  * 校验胖虎记账本机备份 JSON
  * @returns {{ ok: true, db: object } | { ok: false, error: string }}
@@ -13,6 +15,13 @@ export function validateBackup(raw) {
   }
   if (!data || typeof data !== 'object') {
     return { ok: false, error: '备份格式错误' }
+  }
+  if (data.app === 'panghu-ledger-mp') {
+    const db = mpToWebDb(data.db || {})
+    if (!Array.isArray(db.ledgers)) {
+      return { ok: false, error: '缺少 ledgers' }
+    }
+    return { ok: true, db }
   }
   // 支持包一层 { version, exportedAt, db } 或直接 db
   const db = data.db && typeof data.db === 'object' ? data.db : data

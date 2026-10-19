@@ -15,7 +15,8 @@ const showTabBar = computed(() => {
     'entry',
     'personal-entry',
     'template-edit',
-    'templates'
+    'templates',
+    'widget'
   ])
   return !hide.has(route.name)
 })

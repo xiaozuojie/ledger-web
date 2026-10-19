@@ -3,10 +3,11 @@ import { computed, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import * as api from '../api/ledgerApi.js'
 import { computePersonal } from '../calc/personal.js'
-import { parseQuickEntries } from '../calc/parseQuickEntries.js'
+import { parseChat } from '../calc/parseChat.js'
 import { todayStr } from '../utils/date.js'
 import UndoToast from '../components/UndoToast.vue'
 import PanghuTip from '../components/PanghuTip.vue'
+import ChatDock from '../components/ChatDock.vue'
 
 const router = useRouter()
 const ledger = ref(null)
@@ -86,12 +87,11 @@ async function refresh() {
 onMounted(refresh)
 
 function onQuickInput() {
-  quickPreview.value = parseQuickEntries(quickText.value)
+  quickPreview.value = parseChat(quickText.value)
 }
 
-async function confirmQuick() {
+async function saveParsed(items) {
   if (quickSaving.value) return
-  const items = parseQuickEntries(quickText.value)
   if (!items.length) {
     err.value = '没识别到金额，试试：午饭30 打车15'
     return
@@ -106,7 +106,6 @@ async function confirmQuick() {
     quickText.value = ''
     quickPreview.value = []
     showQuick.value = false
-    err.value = ''
     quickHint.value = `已记入 ${r.count} 笔`
     setTimeout(() => {
       quickHint.value = ''
@@ -117,6 +116,10 @@ async function confirmQuick() {
   } finally {
     quickSaving.value = false
   }
+}
+
+async function confirmQuick() {
+  await saveParsed(parseChat(quickText.value))
 }
 
 function addEntry(direction = 'expense') {
@@ -179,6 +182,8 @@ const tipCtx = computed(() => ({
   <p v-if="err" class="err">{{ err }}</p>
   <p v-if="quickHint" class="hint-ok">{{ quickHint }}</p>
   <PanghuTip :ctx="tipCtx" />
+
+  <ChatDock :saving="quickSaving" @save="saveParsed" />
 
   <div class="hero-money">
     <div class="hm-card primary">

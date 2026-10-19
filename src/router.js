@@ -14,12 +14,14 @@ import FeeTypesView from './views/FeeTypesView.vue'
 import PersonalTodayView from './views/PersonalTodayView.vue'
 import PersonalEntryView from './views/PersonalEntryView.vue'
 import AuthView from './views/AuthView.vue'
+import WidgetView from './views/WidgetView.vue'
 
 const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
   routes: [
     { path: '/', name: 'home', component: HomeView },
     { path: '/auth', name: 'auth', component: AuthView },
+    { path: '/widget', name: 'widget', component: WidgetView },
     {
       path: '/l/:slug',
       name: 'open',

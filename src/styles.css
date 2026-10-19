@@ -1020,3 +1020,52 @@ table.sheet th {
 .icon-pick button.selected { outline: 2px solid var(--brand, #0b6e99); }
 .group-row { display: flex; gap: 8px; align-items: center; margin-bottom: 8px; }
 .group-row input { flex: 1; }
+
+.panghu-mark {
+  width: 36px;
+  height: 36px;
+  flex: 0 0 auto;
+}
+.chat-head {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  margin-bottom: 8px;
+}
+.chat-head p { margin: 2px 0 0; }
+.chat-log {
+  max-height: 180px;
+  overflow: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 8px;
+}
+.chat-log p {
+  margin: 0;
+  padding: 8px 10px;
+  border-radius: 12px;
+  background: #fff7f0;
+}
+.chat-log .me {
+  background: #fff;
+  border: 1px solid var(--line, #e4ecef);
+}
+.widget-card {
+  margin: 24px auto;
+  max-width: 420px;
+  background: #fff;
+  border-radius: 20px;
+  padding: 20px;
+  box-shadow: 0 8px 24px rgba(232, 93, 4, 0.12);
+}
+.widget-card h1 { margin: 4px 0 12px; font-size: 22px; }
+.widget-k { margin: 0; color: #8a7568; }
+.widget-n {
+  margin: 0 0 12px;
+  font-size: 48px;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  color: #e85d04;
+}
+

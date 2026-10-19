@@ -3,6 +3,7 @@ import { computed, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import * as api from '../api/ledgerApi.js'
 import { clearSession, getSession } from '../lib/session.js'
+import { dataMode } from '../api/ledgerApi.js'
 import { rowWorkDays } from '../calc/hours.js'
 import { computeMixed } from '../calc/settlement.js'
 import { computePersonal } from '../calc/personal.js'
@@ -29,6 +30,10 @@ const newAccount = ref({ name: '', balance: '0' })
 const newGoal = ref({ name: '', target: '1000', current: '0' })
 const importText = ref('')
 const showImport = ref(false)
+const accessMode = ref('link')
+const members = ref([])
+const memberForm = ref({ name: '', pin: '', email: '', role: 'editor' })
+const isCloud = dataMode === 'supabase'
 
 const kind = computed(() => getSession()?.settlement_kind || 'mixed')
 const isPersonal = computed(() => kind.value === 'personal')
@@ -70,6 +75,8 @@ async function refresh() {
   err.value = ''
   try {
     ledger.value = await api.getLedger()
+    accessMode.value = ledger.value.accessMode === 'members' ? 'members' : 'link'
+    members.value = ledger.value.members || []
     entries.value = await api.listEntries()
     if (ledger.value.settlement_kind === 'personal') {
       monthlyBudget.value = String(ledger.value.budget?.monthly ?? 3000)
@@ -237,6 +244,37 @@ function onBackupFile(ev) {
   }
   reader.readAsText(file, 'utf-8')
   ev.target.value = ''
+}
+
+async function saveAccess() {
+  err.value = ''
+  try {
+    const r = await api.setAccessMode(accessMode.value)
+    accessMode.value = r.accessMode || accessMode.value
+    savedHint.value = accessMode.value === 'members' ? '已改为仅成员可进' : '链接再次对所有人开放'
+  } catch (e) {
+    err.value = e.message
+  }
+}
+
+async function inviteMember() {
+  err.value = ''
+  try {
+    members.value = await api.addMember({ ...memberForm.value })
+    memberForm.value = { name: '', pin: '', email: '', role: 'editor' }
+    savedHint.value = '已添加成员'
+  } catch (e) {
+    err.value = e.message
+  }
+}
+
+async function dropMember(id) {
+  err.value = ''
+  try {
+    members.value = await api.removeMember(id)
+  } catch (e) {
+    err.value = e.message
+  }
 }
 
 function shareUrl() {
@@ -502,8 +540,41 @@ function switchLedger() {
   </section>
 
   <section class="card">
+    <h3>谁可以打开</h3>
+    <p class="muted" style="margin-top: -6px">
+      默认链接谁都能进。改成「仅成员」后，云端要先登录并被邮箱邀请；本机分享要填口令。
+    </p>
+    <select v-model="accessMode">
+      <option value="link">链接任何人</option>
+      <option value="members">仅成员</option>
+    </select>
+    <button class="btn btn-primary btn-block" type="button" style="margin-top: 8px" @click="saveAccess">
+      保存权限
+    </button>
+    <div v-for="m in members" :key="m.id" class="group-row" style="margin-top: 10px">
+      <span style="flex: 1">{{ m.name || m.email }} · {{ m.role === 'viewer' ? '只看' : '可改' }}</span>
+      <button class="btn btn-ghost" type="button" @click="dropMember(m.id)">移除</button>
+    </div>
+    <label style="margin-top: 10px">{{ isCloud ? '对方邮箱（需已注册）' : '成员称呼' }}</label>
+    <input v-if="isCloud" v-model="memberForm.email" placeholder="name@example.com" />
+    <input v-else v-model="memberForm.name" placeholder="例如 阿强" />
+    <label v-if="!isCloud">成员口令（至少 4 位）</label>
+    <input v-if="!isCloud" v-model="memberForm.pin" placeholder="1234" />
+    <label>权限</label>
+    <select v-model="memberForm.role">
+      <option value="editor">可改</option>
+      <option value="viewer">只看</option>
+    </select>
+    <button class="btn btn-ghost btn-block" type="button" style="margin-top: 8px" @click="inviteMember">
+      添加成员
+    </button>
+  </section>
+
+  <section class="card">
     <h3>本机备份</h3>
-    <p class="muted" style="margin-top: -6px">整库 JSON，防清缓存丢账</p>
+    <p class="muted" style="margin-top: -6px">
+      整库 JSON。也可导入小程序复制出来的 panghu-ledger-mp 备份，现场账会进这台浏览器。
+    </p>
     <button class="btn btn-primary btn-block" type="button" @click="downloadBackup">
       导出备份
     </button>

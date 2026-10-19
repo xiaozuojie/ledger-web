@@ -113,7 +113,7 @@ async function onCreate() {
 async function enterLedger(slug) {
   err.value = ''
   try {
-    await api.openLedger(slug)
+    await api.openLedger(slug, { asOwner: true })
     router.push(ledgerHomeRoute())
   } catch (e) {
     err.value = e.message
@@ -185,6 +185,9 @@ function onBackupFile(ev) {
     <div class="brand-mark">PANGHU</div>
     <h1>胖虎记账</h1>
     <p class="lead">现场账 · 个人账 · 今日流水</p>
+    <button class="btn btn-ghost" type="button" @click="router.push({ name: 'widget' })">
+      桌面摘要
+    </button>
   </header>
 
   <PanghuTip :ctx="tipCtx" />
