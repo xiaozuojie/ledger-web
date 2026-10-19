@@ -22,8 +22,6 @@ const savedHint = ref('')
 const previewOpen = ref(false)
 const previewSrc = ref('')
 const feeTypes = ref([])
-const newType = ref({ name: '', kind: 'qty', unit: '车', unitPrice: '100' })
-const showAddType = ref(false)
 const monthlyBudget = ref('3000')
 const accounts = ref([])
 const goals = ref([])
@@ -73,7 +71,6 @@ async function refresh() {
   try {
     ledger.value = await api.getLedger()
     entries.value = await api.listEntries()
-    extras.value = await api.listExtras()
     if (ledger.value.settlement_kind === 'personal') {
       monthlyBudget.value = String(ledger.value.budget?.monthly ?? 3000)
       accounts.value = ledger.value.accounts || []
@@ -303,9 +300,6 @@ function exportXls() {
     '做卫生人工费',
     `${r.workDays} 人天 × ${r.laborUnitPrice} 元/人天 = ${r.laborFee}`
   ])
-  if (Number(r.dayExtrasSum) > 0) {
-    table.push(['各日零星合计', r.dayExtrasSum])
-  }
   extras.value.forEach((x) => table.push([`整本·${x.name}`, x.amount]))
   table.push(['总计', r.total])
   downloadHtmlXls(table, (ledger.value && ledger.value.name) || '结算')
@@ -358,48 +352,6 @@ function switchLedger() {
   router.push({ name: 'home' })
 }
 
-async function saveTypePrice(t) {
-  try {
-    await api.updateFeeType(t.id, {
-      name: t.name,
-      unit: t.unit,
-      unitPrice: t.unitPrice
-    })
-    if (t.id === 'truck') truckUnitPrice.value = String(t.unitPrice ?? '')
-    if (t.id === 'labor') laborUnitPrice.value = String(t.unitPrice ?? '')
-    savedHint.value = '类型已保存'
-    await refresh()
-  } catch (e) {
-    err.value = e.message
-  }
-}
-
-async function addType() {
-  try {
-    await api.addFeeType({
-      name: newType.value.name,
-      kind: newType.value.kind,
-      unit: newType.value.unit,
-      unitPrice: newType.value.unitPrice
-    })
-    newType.value = { name: '', kind: 'qty', unit: '车', unitPrice: '100' }
-    showAddType.value = false
-    savedHint.value = '已添加计费类型'
-    await refresh()
-  } catch (e) {
-    err.value = e.message
-  }
-}
-
-async function removeType(id) {
-  if (!confirm('删除该自定义类型？已记数量将不再计入')) return
-  try {
-    await api.removeFeeType(id)
-    await refresh()
-  } catch (e) {
-    err.value = e.message
-  }
-}
 </script>
 
 <template>
@@ -526,66 +478,6 @@ async function removeType(id) {
     <p class="muted" style="margin-top: 10px">
       当前合计 <strong>{{ result.total }}</strong> 元（{{ result.entryCount }} 行）
     </p>
-  </section>
-
-  <section v-if="!isPersonal" class="card">
-    <h3>计费类型</h3>
-    <p class="muted" style="margin-top: -6px">
-      内置可改名/单价；可添加泡沫车等自定义类型
-    </p>
-    <div v-for="t in feeTypes" :key="t.id" class="fee-type-row">
-      <label>{{ t.builtin ? '内置' : '自定义' }} · {{ t.id === 'extra' ? '零星' : t.name }}</label>
-      <input v-model="t.name" placeholder="名称" />
-      <template v-if="t.kind !== 'fixed' || !t.builtin">
-        <label v-if="t.kind === 'qty'">单位</label>
-        <input v-if="t.kind === 'qty'" v-model="t.unit" placeholder="车" />
-        <label>{{ t.kind === 'fixed' ? '（固定金额在录入时填）' : '单价' }}</label>
-        <input
-          v-if="t.kind !== 'fixed'"
-          v-model="t.unitPrice"
-          type="number"
-          inputmode="decimal"
-        />
-      </template>
-      <div class="btn-row" style="margin-top: 6px">
-        <button class="btn btn-ghost" type="button" @click="saveTypePrice(t)">保存</button>
-        <button
-          v-if="!t.builtin"
-          class="btn btn-ghost danger-ghost"
-          type="button"
-          @click="removeType(t.id)"
-        >
-          删除
-        </button>
-      </div>
-    </div>
-    <button
-      class="btn btn-ghost btn-block"
-      type="button"
-      style="margin-top: 10px"
-      @click="showAddType = !showAddType"
-    >
-      {{ showAddType ? '收起' : '＋ 添加类型' }}
-    </button>
-    <div v-if="showAddType" style="margin-top: 10px">
-      <label>名称</label>
-      <input v-model="newType.name" placeholder="如 泡沫车" />
-      <label>计价</label>
-      <select v-model="newType.kind">
-        <option value="qty">数量 × 单价</option>
-        <option value="fixed">固定金额</option>
-      </select>
-      <label v-if="newType.kind === 'qty'">单位</label>
-      <input v-if="newType.kind === 'qty'" v-model="newType.unit" placeholder="车" />
-      <label v-if="newType.kind === 'qty'">默认单价</label>
-      <input
-        v-if="newType.kind === 'qty'"
-        v-model="newType.unitPrice"
-        type="number"
-        inputmode="decimal"
-      />
-      <button class="btn btn-primary btn-block" type="button" @click="addType">确认添加</button>
-    </div>
   </section>
 
   <section class="card">

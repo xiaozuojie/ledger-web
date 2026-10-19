@@ -16,14 +16,10 @@ const extras = ref([])
 const err = ref('')
 const truckUnitPrice = ref('')
 const laborUnitPrice = ref('')
-const extraName = ref('')
-const extraAmount = ref('')
 const ratesHint = ref('')
 const toastVisible = ref(false)
 const toastMsg = ref('')
 const pendingDelete = ref(null)
-const showExtraForm = ref(false)
-
 const rows = computed(() =>
   entries.value.map((e) => ({
     id: e.id,
@@ -63,7 +59,6 @@ async function refresh() {
   try {
     ledger.value = await api.getLedger()
     entries.value = await api.listEntries()
-    extras.value = await api.listExtras()
     truckUnitPrice.value = String(ledger.value.rates?.truckUnitPrice ?? 100)
     laborUnitPrice.value = String(ledger.value.rates?.laborUnitPrice ?? 230)
   } catch (e) {
@@ -81,16 +76,11 @@ function addTruckEntry() {
 }
 function openTypePicker() {
   showTypePicker.value = !showTypePicker.value
-  showExtraForm.value = false
 }
 function pickFeeType(t) {
   showTypePicker.value = false
   if (t.id === 'truck') {
     addTruckEntry()
-    return
-  }
-  if (t.id === 'extra') {
-    showExtraForm.value = true
     return
   }
   if (t.id === 'labor' || t.kind === 'work_days') {
@@ -155,31 +145,6 @@ async function saveRates() {
   }
 }
 
-async function addExtra() {
-  try {
-    await api.addExtra(extraName.value, extraAmount.value)
-    extraName.value = ''
-    extraAmount.value = ''
-    showExtraForm.value = false
-    await refresh()
-  } catch (e) {
-    err.value = e.message
-  }
-}
-
-function openExtraForm() {
-  showExtraForm.value = !showExtraForm.value
-}
-
-async function removeExtra(id) {
-  try {
-    await api.removeExtra(id)
-    await refresh()
-  } catch (e) {
-    err.value = e.message
-  }
-}
-
 function copyShareLink() {
   const slug = sessionInvite() || ledger.value?.invite_slug
   if (!slug) return
@@ -219,13 +184,10 @@ function copyShareLink() {
   <p v-if="ratesHint" class="hint-ok">{{ ratesHint }}</p>
 
   <section class="card top-actions">
-    <div class="btn-row-3">
+    <div class="btn-row">
       <button class="btn btn-primary" type="button" @click="addEntry">＋ 新建一行</button>
       <button class="btn btn-ghost" type="button" @click="openTypePicker">
-        {{ showTypePicker ? '收起' : '＋ 新增类型' }}
-      </button>
-      <button class="btn btn-ghost" type="button" @click="openExtraForm">
-        {{ showExtraForm ? '收起' : '＋ 整本零星' }}
+        {{ showTypePicker ? '收起' : '＋ 按类型记' }}
       </button>
     </div>
     <div v-if="showTypePicker" class="type-picker">
@@ -250,24 +212,8 @@ function copyShareLink() {
       </button>
     </div>
     <p class="muted" style="margin: 8px 0 0">
-      「新增类型」可选车/人工/零星/自定义；当日零星在行内加。
+      杂费请先到底栏「类型」里添加，再按类型记。
     </p>
-    <div v-if="showExtraForm" class="extra-panel">
-      <label>整本零星名称</label>
-      <input v-model="extraName" placeholder="如 门口做卫生" />
-      <label>金额</label>
-      <input v-model="extraAmount" type="number" inputmode="decimal" placeholder="0" />
-      <div class="btn-row">
-        <button class="btn btn-ghost" type="button" @click="showExtraForm = false">取消</button>
-        <button class="btn btn-primary" type="button" @click="addExtra">确认添加</button>
-      </div>
-    </div>
-    <div v-if="extras.length" class="extra-list-top">
-      <div v-for="x in extras" :key="x.id" class="extra-row">
-        <span>整本 · {{ x.name }} = {{ x.amount }}</span>
-        <button class="linkish" type="button" @click="removeExtra(x.id)">删除</button>
-      </div>
-    </div>
   </section>
 
   <div class="entry-list always">
@@ -281,7 +227,6 @@ function copyShareLink() {
       </div>
       <div class="meta" @click="editEntry(row.id)">
         {{ row.laborNote || '（无人工说明）' }}
-        <template v-if="row.dayExtras"> · 当日零星 {{ row.dayExtras }}</template>
       </div>
       <div class="card-actions">
         <button class="btn btn-ghost" type="button" @click="editEntry(row.id)">编辑</button>
@@ -356,12 +301,6 @@ function copyShareLink() {
       />
       =
       <strong>{{ result.laborFee }}</strong>
-    </div>
-    <div v-if="result.dayExtrasSum" class="extra-row">
-      <span>各日零星合计 = {{ result.dayExtrasSum }}</span>
-    </div>
-    <div v-for="x in extras" :key="'sum-' + x.id" class="extra-row">
-      <span>整本 · {{ x.name }} = {{ x.amount }}</span>
     </div>
     <div v-for="c in customFeeLines" :key="'cf-' + c.id" class="extra-row">
       <span

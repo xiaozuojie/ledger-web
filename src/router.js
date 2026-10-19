@@ -10,6 +10,7 @@ import TemplateEditView from './views/TemplateEditView.vue'
 import TodayView from './views/TodayView.vue'
 import StatsView from './views/StatsView.vue'
 import MineView from './views/MineView.vue'
+import FeeTypesView from './views/FeeTypesView.vue'
 import PersonalTodayView from './views/PersonalTodayView.vue'
 import PersonalEntryView from './views/PersonalEntryView.vue'
 import AuthView from './views/AuthView.vue'
@@ -40,6 +41,12 @@ const router = createRouter({
       path: '/ledger/labor',
       name: 'labor',
       component: LaborLedgerView,
+      meta: { auth: true }
+    },
+    {
+      path: '/types',
+      name: 'fee-types',
+      component: FeeTypesView,
       meta: { auth: true }
     },
     {

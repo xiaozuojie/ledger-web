@@ -19,6 +19,7 @@ const tabs = computed(() => {
   if (kind.value === 'labor') {
     return [
       { name: 'labor', label: '明细', path: '/ledger/labor' },
+      { name: 'fee-types', label: '类型', path: '/types' },
       { name: 'stats', label: '统计', path: '/stats' },
       { name: 'mine', label: '我的', path: '/mine' }
     ]
@@ -26,6 +27,7 @@ const tabs = computed(() => {
   return [
     { name: 'today', label: '今日', path: '/today' },
     { name: 'mixed', label: '样表', path: '/ledger/mixed' },
+    { name: 'fee-types', label: '类型', path: '/types' },
     { name: 'stats', label: '统计', path: '/stats' },
     { name: 'mine', label: '我的', path: '/mine' }
   ]

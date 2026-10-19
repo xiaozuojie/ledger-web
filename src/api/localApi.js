@@ -728,34 +728,15 @@ export async function importPersonalCsv(text) {
 }
 
 export async function listExtras() {
-  const s = requireSession()
-  const db = loadDb()
-  return (db.extras[s.ledger_id] || []).map((x) => ({
-    _id: x.id,
-    id: x.id,
-    name: x.name,
-    amount: Number(x.amount) || 0
-  }))
+  return []
 }
 
-export async function addExtra(name, amount) {
-  const s = requireSession()
-  const db = loadDb()
-  const list = db.extras[s.ledger_id] || (db.extras[s.ledger_id] = [])
-  const row = { id: uid(), name: name || '零星', amount: Number(amount) || 0 }
-  list.push(row)
-  saveDb(db)
-  return { id: row.id }
+export async function addExtra() {
+  return { ok: true, retired: true }
 }
 
-export async function removeExtra(chargeId) {
-  const s = requireSession()
-  const db = loadDb()
-  db.extras[s.ledger_id] = (db.extras[s.ledger_id] || []).filter(
-    (x) => x.id !== chargeId
-  )
-  saveDb(db)
-  return { ok: true }
+export async function removeExtra() {
+  return { ok: true, retired: true }
 }
 
 export async function getTemplate(templateId) {

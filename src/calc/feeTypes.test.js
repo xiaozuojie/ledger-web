@@ -8,13 +8,22 @@ import {
 } from './feeTypes.js'
 
 describe('feeTypes', () => {
-  it('defaults mixed has truck/labor/extra', () => {
+  it('defaults mixed has truck and labor only', () => {
     const t = defaultFeeTypes('mixed')
-    expect(t.map((x) => x.id)).toEqual([
-      BUILTIN_IDS.truck,
-      BUILTIN_IDS.labor,
-      BUILTIN_IDS.extra
-    ])
+    expect(t.map((x) => x.id)).toEqual([BUILTIN_IDS.truck, BUILTIN_IDS.labor])
+  })
+
+  it('normalize drops builtin extra', () => {
+    const list = normalizeFeeTypes(
+      [
+        { id: 'truck', name: '渣土车', kind: 'qty', unitPrice: 100 },
+        { id: 'extra', name: '零星', kind: 'fixed', builtin: true },
+        { id: 'foam', name: '泡沫车', kind: 'qty', unitPrice: 80 }
+      ],
+      'mixed'
+    )
+    expect(list.some((x) => x.id === 'extra')).toBe(false)
+    expect(list.some((x) => x.id === 'foam')).toBe(true)
   })
 
   it('normalize merges custom qty type', () => {

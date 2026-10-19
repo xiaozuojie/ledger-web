@@ -14,20 +14,12 @@ import {
 
 export { entryExtrasSum, entryExtrasList, sumEntryExtras }
 
-function ledgerExtrasSum(extras) {
-  return (extras || []).reduce((s, x) => s + (Number(x.amount) || 0), 0)
-}
-
 function attachLegacyFields(base, feeBreakdown) {
   const truck = feeBreakdown.find((x) => x.id === BUILTIN_IDS.truck) || {}
   const labor = feeBreakdown.find((x) => x.id === BUILTIN_IDS.labor) || {}
-  const extra = feeBreakdown.find((x) => x.id === BUILTIN_IDS.extra) || {}
   const customSum = feeBreakdown
     .filter(
-      (x) =>
-        x.id !== BUILTIN_IDS.truck &&
-        x.id !== BUILTIN_IDS.labor &&
-        x.id !== BUILTIN_IDS.extra
+      (x) => x.id !== BUILTIN_IDS.truck && x.id !== BUILTIN_IDS.labor
     )
     .reduce((s, x) => s + (Number(x.amount) || 0), 0)
   return {
@@ -40,11 +32,7 @@ function attachLegacyFields(base, feeBreakdown) {
     laborFee: labor.amount ?? 0,
     customFeeSum: customSum,
     feeBreakdown,
-    total:
-      (truck.amount || 0) +
-      (labor.amount || 0) +
-      (extra.amount || 0) +
-      customSum
+    total: (truck.amount || 0) + (labor.amount || 0) + customSum
   }
 }
 
@@ -82,10 +70,10 @@ export function computeMixed({ entries, rates, extras, feeTypes, ledger }) {
   }, 0)
   const truckUnit = rates?.truckUnitPrice ?? 100
   const laborUnit = rates?.laborUnitPrice ?? 230
-  const list = extras || []
-  const dayExtrasSum = sumEntryExtras(entries)
-  const bookExtrasSum = ledgerExtrasSum(list)
-  const extrasSum = dayExtrasSum + bookExtrasSum
+  const list = []
+  const dayExtrasSum = 0
+  const bookExtrasSum = 0
+  const extrasSum = 0
 
   const base = {
     kind: 'mixed',
@@ -137,10 +125,10 @@ export function computeLabor({ entries, rates, extras, feeTypes, ledger }) {
   }, 0)
   const truckUnit = rates?.truckUnitPrice ?? 100
   const truckFee = truckCount * truckUnit
-  const list = extras || []
-  const dayExtrasSum = sumEntryExtras(entries)
-  const bookExtrasSum = ledgerExtrasSum(list)
-  const extrasSum = dayExtrasSum + bookExtrasSum
+  const list = []
+  const dayExtrasSum = 0
+  const bookExtrasSum = 0
+  const extrasSum = 0
 
   const base = {
     kind: 'labor',

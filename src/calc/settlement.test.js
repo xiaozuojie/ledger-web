@@ -5,7 +5,7 @@ import { parseTruckCount } from './trucks.js'
 
 describe('mixed settlement', () => {
   it('anchor 5885', () => {
-    expect(13 * 100 + 18.5 * 230 + 330).toBe(5885)
+    expect(13 * 100 + 18.5 * 230).toBe(5555)
     expect(sumWorkDays([{ overrideTotal: 10 }, { overrideTotal: 8.5 }])).toBe(
       18.5
     )
@@ -22,13 +22,13 @@ describe('mixed settlement', () => {
     expect(r.workDays).toBe(18.5)
     expect(r.truckFee).toBe(1300)
     expect(r.laborFee).toBe(4255)
-    expect(r.extrasSum).toBe(330)
+    expect(r.extrasSum).toBe(0)
     expect(r.dayExtrasSum).toBe(0)
-    expect(r.bookExtrasSum).toBe(330)
-    expect(r.total).toBe(5885)
+    expect(r.bookExtrasSum).toBe(0)
+    expect(r.total).toBe(5555)
   })
 
-  it('sums per-day extras into total', () => {
+  it('ignores legacy extras in total', () => {
     const r = computeMixed({
       entries: [
         {
@@ -45,10 +45,10 @@ describe('mixed settlement', () => {
       rates: { truckUnitPrice: 100, laborUnitPrice: 200 },
       extras: [{ name: '整本', amount: 20 }]
     })
-    expect(r.dayExtrasSum).toBe(80)
-    expect(r.bookExtrasSum).toBe(20)
-    expect(r.extrasSum).toBe(100)
-    expect(r.total).toBe(1 * 100 + 2 * 200 + 100)
+    expect(r.dayExtrasSum).toBe(0)
+    expect(r.bookExtrasSum).toBe(0)
+    expect(r.extrasSum).toBe(0)
+    expect(r.total).toBe(1 * 100 + 2 * 200)
   })
 
   it('adds custom fee type into total and breakdown', () => {
@@ -70,7 +70,6 @@ describe('mixed settlement', () => {
           unitPrice: 200,
           builtin: true
         },
-        { id: 'extra', name: '零星', kind: 'fixed', builtin: true },
         { id: 'foam', name: '泡沫车', kind: 'qty', unit: '车', unitPrice: 50 }
       ]
     })

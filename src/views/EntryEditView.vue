@@ -354,24 +354,6 @@ async function remove() {
       />
     </div>
   </div>
-  <div class="card">
-    <h3>当日零星</h3>
-    <p class="muted" style="margin-top: -6px">
-      跟这一天绑定；保存本行后计入汇总。不计入人天。
-    </p>
-    <div v-for="x in dayExtras" :key="x.id" class="extra-row">
-      <span>{{ x.name }} = {{ x.amount }}</span>
-      <button class="linkish" type="button" @click="removeDayExtra(x.id)">删除</button>
-    </div>
-    <p v-if="dayExtras.length" class="muted">当日零星小计 {{ dayExtrasTotal }} 元</p>
-    <label>名称</label>
-    <input v-model="extraName" placeholder="如 门口做卫生" />
-    <label>金额</label>
-    <input v-model="extraAmount" type="number" inputmode="decimal" placeholder="0" />
-    <button class="btn btn-ghost btn-block" type="button" @click="addDayExtra">
-      加入当日零星
-    </button>
-  </div>
   <div class="btn-row">
     <button
       v-if="entryId"

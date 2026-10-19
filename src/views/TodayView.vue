@@ -12,15 +12,11 @@ import PanghuTip from '../components/PanghuTip.vue'
 const router = useRouter()
 const ledger = ref(null)
 const entries = ref([])
-const extras = ref([])
 const err = ref('')
 const toastVisible = ref(false)
 const toastMsg = ref('')
 const pendingDelete = ref(null)
-const showExtraForm = ref(false)
 const showTypePicker = ref(false)
-const extraName = ref('')
-const extraAmount = ref('')
 const showMore = ref(false)
 
 const today = todayStr()
@@ -66,7 +62,7 @@ const monthResult = computed(() =>
   computeMixed({
     entries: monthEntries.value,
     rates: rates.value,
-    extras: extras.value,
+    extras: [],
     feeTypes: ledger.value?.feeTypes,
     ledger: ledger.value
   })
@@ -76,7 +72,7 @@ const result = computed(() =>
   computeMixed({
     entries: entries.value,
     rates: rates.value,
-    extras: extras.value,
+    extras: [],
     feeTypes: ledger.value?.feeTypes,
     ledger: ledger.value
   })
@@ -98,7 +94,6 @@ async function refresh() {
   try {
     ledger.value = await api.getLedger()
     entries.value = await api.listEntries()
-    extras.value = await api.listExtras()
   } catch (e) {
     err.value = e.message
   }
@@ -114,17 +109,11 @@ function addTruckEntry() {
 }
 function openTypePicker() {
   showTypePicker.value = !showTypePicker.value
-  showExtraForm.value = false
 }
 function pickFeeType(t) {
   showTypePicker.value = false
   if (t.id === 'truck') {
     addTruckEntry()
-    return
-  }
-  if (t.id === 'extra') {
-    showExtraForm.value = true
-    showMore.value = true
     return
   }
   if (t.id === 'labor' || t.kind === 'work_days') {
@@ -138,31 +127,6 @@ function pickFeeType(t) {
 }
 function editEntry(id) {
   router.push({ name: 'entry', query: { kind: 'mixed', id } })
-}
-
-function openExtraForm() {
-  showExtraForm.value = !showExtraForm.value
-}
-
-async function addExtra() {
-  try {
-    await api.addExtra(extraName.value, extraAmount.value)
-    extraName.value = ''
-    extraAmount.value = ''
-    showExtraForm.value = false
-    await refresh()
-  } catch (e) {
-    err.value = e.message
-  }
-}
-
-async function removeExtra(id) {
-  try {
-    await api.removeExtra(id)
-    await refresh()
-  } catch (e) {
-    err.value = e.message
-  }
 }
 
 function askDelete(row) {
@@ -198,7 +162,6 @@ function onUndo() {
 
 function flowDotClass(row) {
   if (row.truckN > 0) return 'truck'
-  if (row.dayExtras) return 'extra'
   return 'labor'
 }
 
@@ -266,26 +229,8 @@ const tipCtx = computed(() => ({
         {{ t.name }}
       </button>
     </div>
-    <div v-if="showMore" style="margin-top: 10px">
-      <button class="btn btn-ghost btn-block" type="button" @click="openExtraForm">
-        {{ showExtraForm ? '收起整本零星' : '＋ 整本零星' }}
-      </button>
-      <div v-if="showExtraForm" class="extra-panel">
-        <label>整本零星名称</label>
-        <input v-model="extraName" placeholder="如 门口做卫生" />
-        <label>金额</label>
-        <input v-model="extraAmount" type="number" inputmode="decimal" placeholder="0" />
-        <div class="btn-row">
-          <button class="btn btn-ghost" type="button" @click="showExtraForm = false">取消</button>
-          <button class="btn btn-primary" type="button" @click="addExtra">确认添加</button>
-        </div>
-      </div>
-      <div v-if="extras.length" class="extra-list-top">
-        <div v-for="x in extras" :key="x.id" class="extra-row">
-          <span>整本 · {{ x.name }} = {{ x.amount }}</span>
-          <button class="linkish" type="button" @click="removeExtra(x.id)">删除</button>
-        </div>
-      </div>
+    <div v-if="showMore" class="muted" style="margin-top: 10px">
+      杂费请先到底栏「类型」里添加，再按类型记。
     </div>
   </section>
 
@@ -299,7 +244,6 @@ const tipCtx = computed(() => ({
       </div>
       <div class="meta" @click="editEntry(row.id)">
         <template v-if="row.trucks">车 {{ row.trucks }} · </template>
-        <template v-if="row.dayExtras">零星 {{ row.dayExtras }} · </template>
         {{ row.date }}
       </div>
       <div class="card-actions">

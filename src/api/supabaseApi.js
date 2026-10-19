@@ -133,28 +133,15 @@ export async function removeEntry(entryId) {
 }
 
 export async function listExtras() {
-  const rows = (await rpc('api_list_extras', { p_token: getToken() })) || []
-  return rows.map((x) => ({
-    _id: x.id,
-    id: x.id,
-    name: x.name,
-    amount: Number(x.amount) || 0
-  }))
+  return []
 }
 
-export async function addExtra(name, amount) {
-  return rpc('api_add_extra', {
-    p_token: getToken(),
-    p_name: name,
-    p_amount: Number(amount) || 0
-  })
+export async function addExtra() {
+  return { ok: true, retired: true }
 }
 
-export async function removeExtra(chargeId) {
-  return rpc('api_remove_extra', {
-    p_token: getToken(),
-    p_charge_id: chargeId
-  })
+export async function removeExtra() {
+  return { ok: true, retired: true }
 }
 
 export async function getTemplate(templateId) {

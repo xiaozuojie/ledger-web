@@ -19,15 +19,11 @@ const extras = ref([])
 const err = ref('')
 const laborUnitPrice = ref('')
 const truckUnitPrice = ref('')
-const extraName = ref('')
-const extraAmount = ref('')
 const previewOpen = ref(false)
 const previewSrc = ref('')
 const toastVisible = ref(false)
 const toastMsg = ref('')
 const pendingDelete = ref(null)
-const showExtraForm = ref(false)
-
 const result = computed(() =>
   computeLabor({
     entries: entries.value,
@@ -62,7 +58,6 @@ async function refresh() {
   try {
     ledger.value = await api.getLedger()
     entries.value = await api.listEntries()
-    extras.value = await api.listExtras()
     laborUnitPrice.value = String(ledger.value.rates?.laborUnitPrice ?? 300)
     truckUnitPrice.value = String(ledger.value.rates?.truckUnitPrice ?? 100)
   } catch (e) {
@@ -124,31 +119,6 @@ async function saveRates() {
       laborUnitPrice: Number(laborUnitPrice.value) || 0,
       truckUnitPrice: Number(truckUnitPrice.value) || 0
     })
-    await refresh()
-  } catch (e) {
-    err.value = e.message
-  }
-}
-
-async function addExtra() {
-  try {
-    await api.addExtra(extraName.value, extraAmount.value)
-    extraName.value = ''
-    extraAmount.value = ''
-    showExtraForm.value = false
-    await refresh()
-  } catch (e) {
-    err.value = e.message
-  }
-}
-
-function openExtraForm() {
-  showExtraForm.value = !showExtraForm.value
-}
-
-async function removeExtra(id) {
-  try {
-    await api.removeExtra(id)
     await refresh()
   } catch (e) {
     err.value = e.message
@@ -225,32 +195,13 @@ function logout() {
   <p v-if="err" class="err">{{ err }}</p>
 
   <section class="card top-actions">
-    <div class="btn-row-3">
+    <div class="btn-row">
       <button class="btn btn-primary" type="button" @click="addEntry">＋ 新建一行</button>
       <button class="btn btn-ghost" type="button" @click="addTruckEntry">＋ 记渣土车</button>
-      <button class="btn btn-ghost" type="button" @click="openExtraForm">
-        {{ showExtraForm ? '收起' : '＋ 整本零星' }}
-      </button>
     </div>
     <p class="muted" style="margin: 8px 0 0">
-      「记渣土车」会打开录入并预填 1 车；当日零星在行内添加。
+      「记渣土车」会打开录入并预填 1 车。杂费用自定义类型记。
     </p>
-    <div v-if="showExtraForm" class="extra-panel">
-      <label>整本零星名称</label>
-      <input v-model="extraName" placeholder="如 材料费" />
-      <label>金额</label>
-      <input v-model="extraAmount" type="number" inputmode="decimal" placeholder="0" />
-      <div class="btn-row">
-        <button class="btn btn-ghost" type="button" @click="showExtraForm = false">取消</button>
-        <button class="btn btn-primary" type="button" @click="addExtra">确认添加</button>
-      </div>
-    </div>
-    <div v-if="extras.length" class="extra-list-top">
-      <div v-for="x in extras" :key="x.id" class="extra-row">
-        <span>整本 · {{ x.name }} = {{ x.amount }}</span>
-        <button class="linkish" type="button" @click="removeExtra(x.id)">删除</button>
-      </div>
-    </div>
   </section>
 
   <!-- always：避免宽屏 media 把列表藏掉却无表格 -->
@@ -263,7 +214,6 @@ function logout() {
       <div class="meta" @click="editEntry(row.id)">
         <template v-if="row.trucks">车次 {{ row.trucks }} · </template>
         人数 {{ row.peopleText }} · 天数 {{ row.daysText }}
-        <template v-if="row.dayExtras"> · 当日零星 {{ row.dayExtras }}</template>
       </div>
       <div v-if="row.note" class="meta" @click="editEntry(row.id)">{{ row.note }}</div>
       <div class="card-actions">
@@ -340,12 +290,6 @@ function logout() {
       />
       <span>=</span>
       <strong>{{ result.laborFee }}</strong>
-    </div>
-    <div v-if="result.dayExtrasSum" class="extra-row">
-      <span>各日零星合计 = {{ result.dayExtrasSum }}</span>
-    </div>
-    <div v-for="x in extras" :key="'sum-' + x.id" class="extra-row">
-      <span>整本 · {{ x.name }} = {{ x.amount }}</span>
     </div>
     <button
       class="btn btn-primary btn-block"

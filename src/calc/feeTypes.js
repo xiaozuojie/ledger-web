@@ -1,13 +1,14 @@
 import { parseTruckCount } from './trucks.js'
 import { sumWorkDays, laborTotal } from './hours.js'
-import { sumEntryExtras } from './settlementExtras.js'
 
 /** 内置类型 id，稳定不可删 */
 export const BUILTIN_IDS = {
   truck: 'truck',
-  labor: 'labor',
-  extra: 'extra'
+  labor: 'labor'
 }
+
+/** 已废止的内置零星 id，normalize 时丢弃 */
+export const RETIRED_EXTRA_ID = 'extra'
 
 /**
  * @typedef {{
@@ -42,15 +43,6 @@ export function defaultFeeTypes(kind) {
       unitPrice: laborPrice,
       builtin: true,
       enabled: true
-    },
-    {
-      id: BUILTIN_IDS.extra,
-      name: '零星',
-      kind: 'fixed',
-      unit: '元',
-      unitPrice: null,
-      builtin: true,
-      enabled: true
     }
   ]
 }
@@ -62,6 +54,7 @@ export function normalizeFeeTypes(list, kind = 'mixed') {
   for (const d of defaults) byId.set(d.id, { ...d })
   for (const raw of list || []) {
     if (!raw || !raw.id) continue
+    if (raw.id === RETIRED_EXTRA_ID) continue
     const prev = byId.get(raw.id) || {}
     const kindVal = raw.kind || prev.kind || 'qty'
     byId.set(raw.id, {
@@ -82,7 +75,7 @@ export function normalizeFeeTypes(list, kind = 'mixed') {
   // 内置按默认顺序，其后自定义按出现顺序
   const customOrder = (list || [])
     .map((x) => x && x.id)
-    .filter((id) => id && !defaults.some((d) => d.id === id))
+    .filter((id) => id && id !== RETIRED_EXTRA_ID && !defaults.some((d) => d.id === id))
   const ordered = [
     ...defaults.map((d) => byId.get(d.id)),
     ...customOrder.map((id) => byId.get(id)).filter(Boolean)
@@ -114,10 +107,6 @@ export function sumTruckQty(entries) {
     const f = e.fields || {}
     return s + parseTruckCount(f.trucks || '')
   }, 0)
-}
-
-function ledgerExtrasSum(extras) {
-  return (extras || []).reduce((s, x) => s + (Number(x.amount) || 0), 0)
 }
 
 /**
@@ -169,20 +158,8 @@ export function feeTypeAmount(type, { entries, rates, extras }) {
       unit: t.unit || '人天'
     }
   }
-  if (t.id === BUILTIN_IDS.extra || t.kind === 'fixed') {
-    if (t.id === BUILTIN_IDS.extra) {
-      const day = sumEntryExtras(entries)
-      const book = ledgerExtrasSum(extras)
-      return {
-        id: t.id,
-        name: t.name,
-        kind: 'fixed',
-        qty: 0,
-        unitPrice: null,
-        amount: day + book,
-        unit: '元'
-      }
-    }
+  void extras
+  if (t.kind === 'fixed') {
     // 自定义 fixed：从 feeQtys 存金额（把 qty 当金额）
     const amount = sumFeeQty(entries, t.id)
     return {

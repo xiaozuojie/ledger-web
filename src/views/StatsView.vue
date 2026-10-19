@@ -109,7 +109,6 @@ async function refresh() {
   try {
     ledger.value = await api.getLedger()
     entries.value = await api.listEntries()
-    extras.value = await api.listExtras()
   } catch (e) {
     err.value = e.message
   }
