@@ -20,9 +20,9 @@ jobs:
           node-version: 20
           cache: npm
       - run: npm ci
+      # 有 Secrets 即云端；未配置密钥时前端自动回退本地（勿再写死 VITE_DATA_MODE=local）
       - run: npm run build
         env:
-          VITE_DATA_MODE: local
           VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
           VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
           VITE_PAGES_BASE: /${{ github.event.repository.name }}/

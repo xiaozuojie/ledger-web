@@ -42,8 +42,20 @@ const result = computed(() =>
       truckUnitPrice: Number(truckUnitPrice.value) || 0,
       laborUnitPrice: Number(laborUnitPrice.value) || 0
     },
-    extras: extras.value
+    extras: extras.value,
+    feeTypes: ledger.value?.feeTypes,
+    ledger: ledger.value
   })
+)
+
+const feeTypes = computed(() =>
+  (ledger.value?.feeTypes || []).filter((t) => t.enabled !== false)
+)
+const showTypePicker = ref(false)
+const customFeeLines = computed(() =>
+  (result.value.feeBreakdown || []).filter(
+    (x) => x.id !== 'truck' && x.id !== 'labor' && x.id !== 'extra' && x.amount
+  )
 )
 
 async function refresh() {
@@ -66,6 +78,29 @@ function addEntry() {
 }
 function addTruckEntry() {
   router.push({ name: 'entry', query: { kind: 'mixed', focus: 'trucks' } })
+}
+function openTypePicker() {
+  showTypePicker.value = !showTypePicker.value
+  showExtraForm.value = false
+}
+function pickFeeType(t) {
+  showTypePicker.value = false
+  if (t.id === 'truck') {
+    addTruckEntry()
+    return
+  }
+  if (t.id === 'extra') {
+    showExtraForm.value = true
+    return
+  }
+  if (t.id === 'labor' || t.kind === 'work_days') {
+    addEntry()
+    return
+  }
+  router.push({
+    name: 'entry',
+    query: { kind: 'mixed', focus: 'fee', typeId: t.id }
+  })
 }
 function editEntry(id) {
   router.push({ name: 'entry', query: { kind: 'mixed', id } })
@@ -165,6 +200,7 @@ function copyShareLink() {
 <template>
   <header class="topbar">
     <div>
+      <div class="brand-mark">胖虎记账</div>
       <h2>{{ ledger?.name || '样表' }}</h2>
       <div class="muted">
         <span class="chip">纸面四列</span>
@@ -185,13 +221,36 @@ function copyShareLink() {
   <section class="card top-actions">
     <div class="btn-row-3">
       <button class="btn btn-primary" type="button" @click="addEntry">＋ 新建一行</button>
-      <button class="btn btn-ghost" type="button" @click="addTruckEntry">＋ 记渣土车</button>
+      <button class="btn btn-ghost" type="button" @click="openTypePicker">
+        {{ showTypePicker ? '收起' : '＋ 新增类型' }}
+      </button>
       <button class="btn btn-ghost" type="button" @click="openExtraForm">
         {{ showExtraForm ? '收起' : '＋ 整本零星' }}
       </button>
     </div>
+    <div v-if="showTypePicker" class="type-picker">
+      <button
+        v-for="t in feeTypes"
+        :key="t.id"
+        class="btn btn-ghost btn-block"
+        type="button"
+        @click="pickFeeType(t)"
+      >
+        {{ t.name }}
+        <span class="muted">
+          ·
+          {{
+            t.kind === 'qty'
+              ? `${t.unitPrice ?? ''}元/${t.unit || '次'}`
+              : t.kind === 'work_days'
+                ? `${t.unitPrice ?? ''}元/人天`
+                : '固定金额'
+          }}
+        </span>
+      </button>
+    </div>
     <p class="muted" style="margin: 8px 0 0">
-      「记渣土车」预填 1 车；当日零星在行内加。
+      「新增类型」可选车/人工/零星/自定义；当日零星在行内加。
     </p>
     <div v-if="showExtraForm" class="extra-panel">
       <label>整本零星名称</label>
@@ -303,6 +362,15 @@ function copyShareLink() {
     </div>
     <div v-for="x in extras" :key="'sum-' + x.id" class="extra-row">
       <span>整本 · {{ x.name }} = {{ x.amount }}</span>
+    </div>
+    <div v-for="c in customFeeLines" :key="'cf-' + c.id" class="extra-row">
+      <span
+        >{{ c.name }}
+        <template v-if="c.kind === 'qty'"
+          >{{ c.qty }}{{ c.unit || '' }} × {{ c.unitPrice }}</template
+        >
+        = {{ c.amount }}</span
+      >
     </div>
     <div class="total">总计 {{ result.total }} 元</div>
   </section>

@@ -2,6 +2,17 @@
  * 纯浏览器存储（localStorage）。同一手机/浏览器可完整使用；
  * 不同设备互不同步（无需 Supabase）。开放账本：本机列表可见。
  */
+import {
+  defaultFeeTypes,
+  normalizeFeeTypes,
+  feeTypesOfLedger
+} from '../calc/feeTypes.js'
+import {
+  defaultPersonalCategories,
+  normalizeCategories
+} from '../calc/personalCategories.js'
+import { validateBackup, wrapBackup } from '../utils/backup.js'
+
 const DB_KEY = 'ledger_web_local_db_v1'
 const SESSION_KEY = 'ledger_web_session_v1'
 
@@ -57,11 +68,74 @@ const BUILTIN_TEMPLATES = [
       truckUnitPrice: 100,
       laborUnitPrice: 230
     }
+  },
+  {
+    id: '33333333-3333-3333-3333-333333333333',
+    name: '个人收支',
+    builtin: true,
+    fields: [
+      { key: 'date', label: '日期', type: 'date', required: true },
+      { key: 'amount', label: '金额', type: 'number', required: true },
+      { key: 'direction', label: '收支', type: 'text', required: true },
+      { key: 'categoryId', label: '分类', type: 'text', required: true },
+      { key: 'note', label: '备注', type: 'text', required: false }
+    ],
+    settlement: {
+      kind: 'personal',
+      defaultMonthlyBudget: 3000
+    }
   }
 ]
 
+const PERSONAL_TPL_ID = '33333333-3333-3333-3333-333333333333'
+
+function defaultAccounts() {
+  return [
+    { id: 'cash', name: '现金', balance: 0 },
+    { id: 'wechat', name: '微信', balance: 0 },
+    { id: 'alipay', name: '支付宝', balance: 0 }
+  ]
+}
+
+function ensureAccounts(led) {
+  if (!led.accounts?.length) led.accounts = defaultAccounts()
+  return led.accounts
+}
+
+function ensureGoals(led) {
+  if (!Array.isArray(led.goals)) led.goals = []
+  return led.goals
+}
+
+/** 按明细方向调整账户余额；reverse=true 表示撤销 */
+function applyAccountDelta(led, fields, reverse = false) {
+  if (!led || led.settlement_kind !== 'personal') return
+  const aid = fields?.accountId
+  if (!aid) return
+  const accounts = ensureAccounts(led)
+  const acc = accounts.find((a) => a.id === aid)
+  if (!acc) return
+  const amt = Math.abs(Number(fields.amount) || 0)
+  if (!amt) return
+  const sign = fields.direction === 'income' ? 1 : -1
+  const delta = reverse ? -sign * amt : sign * amt
+  acc.balance = Math.round(((Number(acc.balance) || 0) + delta) * 100) / 100
+}
+
 function uid() {
   return crypto.randomUUID()
+}
+
+function ensureBuiltinTemplates(db) {
+  if (!db.templates?.length) {
+    db.templates = BUILTIN_TEMPLATES.map((t) => ({ ...t }))
+    return
+  }
+  for (const t of BUILTIN_TEMPLATES) {
+    if (!db.templates.some((x) => x.id === t.id)) {
+      db.templates.push({ ...t })
+    }
+  }
 }
 
 function loadDb() {
@@ -69,7 +143,7 @@ function loadDb() {
     const raw = localStorage.getItem(DB_KEY)
     if (raw) {
       const db = JSON.parse(raw)
-      if (!db.templates?.length) db.templates = BUILTIN_TEMPLATES
+      ensureBuiltinTemplates(db)
       return db
     }
   } catch {
@@ -134,22 +208,35 @@ export async function createLedger({ name, templateId }) {
   if (!tpl) throw new Error('模板不存在')
   if (!name?.trim()) throw new Error('请填写账本名称')
   const kind = tpl.settlement?.kind || 'labor'
-  const rates =
-    kind === 'mixed'
-      ? {
-          truckUnitPrice: tpl.settlement.truckUnitPrice ?? 100,
-          laborUnitPrice: tpl.settlement.laborUnitPrice ?? 230
-        }
-      : {
-          laborUnitPrice: tpl.settlement.defaultUnitPrice ?? 300,
-          truckUnitPrice: tpl.settlement.truckUnitPrice ?? 100
-        }
+  let rates
+  if (kind === 'mixed') {
+    rates = {
+      truckUnitPrice: tpl.settlement.truckUnitPrice ?? 100,
+      laborUnitPrice: tpl.settlement.laborUnitPrice ?? 230
+    }
+  } else if (kind === 'personal') {
+    rates = {}
+  } else {
+    rates = {
+      laborUnitPrice: tpl.settlement.defaultUnitPrice ?? 300,
+      truckUnitPrice: tpl.settlement.truckUnitPrice ?? 100
+    }
+  }
   const ledger = {
     id: uid(),
     name: name.trim(),
     template_id: templateId,
     settlement_kind: kind,
     rates,
+    feeTypes: kind === 'personal' ? [] : defaultFeeTypes(kind),
+    categories:
+      kind === 'personal' ? defaultPersonalCategories() : undefined,
+    budget:
+      kind === 'personal'
+        ? { monthly: tpl.settlement?.defaultMonthlyBudget ?? 3000 }
+        : undefined,
+    accounts: kind === 'personal' ? defaultAccounts() : undefined,
+    goals: kind === 'personal' ? [] : undefined,
     invite_slug: uid().replace(/-/g, '').slice(0, 10),
     updated_at: Date.now()
   }
@@ -166,6 +253,17 @@ export async function createLedger({ name, templateId }) {
   }
   setSession(session)
   return session
+}
+
+/** 快捷：按模式建账 mode = field_mixed | field_labor | personal */
+export async function createLedgerByMode({ name, mode }) {
+  const map = {
+    field_mixed: '22222222-2222-2222-2222-222222222222',
+    field_labor: '11111111-1111-1111-1111-111111111111',
+    personal: PERSONAL_TPL_ID
+  }
+  const templateId = map[mode] || map.field_mixed
+  return createLedger({ name, templateId })
 }
 
 export async function openLedger(inviteSlug) {
@@ -198,14 +296,172 @@ export async function getLedger() {
   const db = loadDb()
   const led = db.ledgers.find((l) => l.id === s.ledger_id)
   if (!led) throw new Error('账本不存在')
+  const kind = led.settlement_kind || 'mixed'
+  if (kind === 'personal') {
+    if (!led.categories?.length) {
+      led.categories = defaultPersonalCategories()
+      saveDb(db)
+    } else {
+      led.categories = normalizeCategories(led.categories)
+    }
+    if (!led.budget) {
+      led.budget = { monthly: 3000 }
+      saveDb(db)
+    }
+    ensureAccounts(led)
+    ensureGoals(led)
+    saveDb(db)
+  } else if (!led.feeTypes?.length) {
+    led.feeTypes = defaultFeeTypes(kind)
+    saveDb(db)
+  } else {
+    led.feeTypes = normalizeFeeTypes(led.feeTypes, kind)
+  }
   return {
     id: led.id,
     name: led.name,
     template_id: led.template_id,
-    settlement_kind: led.settlement_kind,
+    settlement_kind: kind,
     rates: led.rates,
+    feeTypes: led.feeTypes || [],
+    categories: led.categories,
+    budget: led.budget,
+    accounts: led.accounts,
+    goals: led.goals,
     invite_slug: led.invite_slug
   }
+}
+
+export async function updateBudget(budget) {
+  const s = requireSession()
+  const db = loadDb()
+  const led = db.ledgers.find((l) => l.id === s.ledger_id)
+  if (!led) throw new Error('账本不存在')
+  if (led.settlement_kind !== 'personal') throw new Error('仅个人账可设预算')
+  led.budget = {
+    monthly: Number(budget?.monthly) || 0
+  }
+  led.updated_at = Date.now()
+  saveDb(db)
+  return { ok: true, budget: led.budget }
+}
+
+/** 首页：本机全部账本 + 明细 + 零星（无需会话） */
+export async function listAllLedgerBundles() {
+  const db = loadDb()
+  return db.ledgers.slice().map((led) => {
+    const kind = led.settlement_kind || 'mixed'
+    const feeTypes =
+      kind === 'personal'
+        ? []
+        : led.feeTypes?.length
+          ? normalizeFeeTypes(led.feeTypes, kind)
+          : defaultFeeTypes(kind)
+    return {
+      id: led.id,
+      name: led.name,
+      invite_slug: led.invite_slug,
+      settlement_kind: kind,
+      rates: led.rates || {},
+      feeTypes,
+      categories:
+        kind === 'personal'
+          ? normalizeCategories(led.categories)
+          : undefined,
+      budget: led.budget,
+      updated_at: led.updated_at,
+      entries: (db.entries[led.id] || []).map(normalizeEntry),
+      extras: (db.extras[led.id] || []).map((x) => ({
+        id: x.id,
+        name: x.name,
+        amount: Number(x.amount) || 0
+      }))
+    }
+  })
+}
+
+export async function listFeeTypes() {
+  const led = await getLedger()
+  return feeTypesOfLedger(led)
+}
+
+export async function addFeeType(payload) {
+  const s = requireSession()
+  const db = loadDb()
+  const led = db.ledgers.find((l) => l.id === s.ledger_id)
+  if (!led) throw new Error('账本不存在')
+  const name = String(payload?.name || '').trim()
+  if (!name) throw new Error('请填写类型名称')
+  const kind = payload?.kind === 'fixed' ? 'fixed' : 'qty'
+  const row = {
+    id: uid(),
+    name,
+    kind,
+    unit: String(payload?.unit || (kind === 'fixed' ? '元' : '次')).trim(),
+    unitPrice: kind === 'qty' ? Number(payload?.unitPrice) || 0 : null,
+    builtin: false,
+    enabled: true
+  }
+  const list = normalizeFeeTypes(
+    [...(led.feeTypes || defaultFeeTypes(led.settlement_kind)), row],
+    led.settlement_kind
+  )
+  led.feeTypes = list
+  led.updated_at = Date.now()
+  saveDb(db)
+  return row
+}
+
+export async function updateFeeType(id, patch) {
+  const s = requireSession()
+  const db = loadDb()
+  const led = db.ledgers.find((l) => l.id === s.ledger_id)
+  if (!led) throw new Error('账本不存在')
+  const list = normalizeFeeTypes(
+    led.feeTypes || defaultFeeTypes(led.settlement_kind),
+    led.settlement_kind
+  )
+  const idx = list.findIndex((t) => t.id === id)
+  if (idx < 0) throw new Error('类型不存在')
+  const cur = list[idx]
+  if (patch.name != null) cur.name = String(patch.name).trim() || cur.name
+  if (patch.unit != null) cur.unit = String(patch.unit)
+  if (patch.unitPrice != null && patch.unitPrice !== '') {
+    cur.unitPrice = Number(patch.unitPrice)
+  }
+  if (patch.enabled != null) cur.enabled = Boolean(patch.enabled)
+  if (patch.kind != null && !cur.builtin) {
+    cur.kind = patch.kind === 'fixed' ? 'fixed' : 'qty'
+  }
+  led.feeTypes = list
+  // 同步内置单价到 rates
+  if (id === 'truck' && cur.unitPrice != null) {
+    led.rates = { ...led.rates, truckUnitPrice: Number(cur.unitPrice) }
+  }
+  if (id === 'labor' && cur.unitPrice != null) {
+    led.rates = { ...led.rates, laborUnitPrice: Number(cur.unitPrice) }
+  }
+  led.updated_at = Date.now()
+  saveDb(db)
+  return cur
+}
+
+export async function removeFeeType(id) {
+  const s = requireSession()
+  const db = loadDb()
+  const led = db.ledgers.find((l) => l.id === s.ledger_id)
+  if (!led) throw new Error('账本不存在')
+  const list = normalizeFeeTypes(
+    led.feeTypes || defaultFeeTypes(led.settlement_kind),
+    led.settlement_kind
+  )
+  const t = list.find((x) => x.id === id)
+  if (!t) throw new Error('类型不存在')
+  if (t.builtin) throw new Error('内置类型不可删除')
+  led.feeTypes = list.filter((x) => x.id !== id)
+  led.updated_at = Date.now()
+  saveDb(db)
+  return { ok: true }
 }
 
 export async function updateRates(rates) {
@@ -214,6 +470,19 @@ export async function updateRates(rates) {
   const led = db.ledgers.find((l) => l.id === s.ledger_id)
   if (!led) throw new Error('账本不存在')
   led.rates = rates
+  const types = normalizeFeeTypes(
+    led.feeTypes || defaultFeeTypes(led.settlement_kind),
+    led.settlement_kind
+  )
+  for (const t of types) {
+    if (t.id === 'truck' && rates.truckUnitPrice != null) {
+      t.unitPrice = Number(rates.truckUnitPrice)
+    }
+    if (t.id === 'labor' && rates.laborUnitPrice != null) {
+      t.unitPrice = Number(rates.laborUnitPrice)
+    }
+  }
+  led.feeTypes = types
   led.updated_at = Date.now()
   saveDb(db)
   return { ok: true, rates }
@@ -271,10 +540,15 @@ export async function upsertEntry(payload) {
         : null,
     summary: payload.summary || null
   }
-  const idx = list.findIndex((e) => e.id === body.id)
-  if (idx >= 0) list[idx] = body
-  else list.push(body)
   const led = db.ledgers.find((l) => l.id === s.ledger_id)
+  const idx = list.findIndex((e) => e.id === body.id)
+  if (idx >= 0) {
+    applyAccountDelta(led, list[idx].fields, true)
+    list[idx] = body
+  } else {
+    list.push(body)
+  }
+  applyAccountDelta(led, body.fields, false)
   if (led) led.updated_at = Date.now()
   saveDb(db)
   return { id: body.id }
@@ -283,11 +557,174 @@ export async function upsertEntry(payload) {
 export async function removeEntry(entryId) {
   const s = requireSession()
   const db = loadDb()
-  db.entries[s.ledger_id] = (db.entries[s.ledger_id] || []).filter(
-    (e) => e.id !== entryId
-  )
+  const list = db.entries[s.ledger_id] || []
+  const row = list.find((e) => e.id === entryId)
+  const led = db.ledgers.find((l) => l.id === s.ledger_id)
+  if (row) applyAccountDelta(led, row.fields, true)
+  db.entries[s.ledger_id] = list.filter((e) => e.id !== entryId)
   saveDb(db)
   return { ok: true }
+}
+
+/** 批量写入个人明细（一句话/导入） */
+export async function bulkAddPersonalEntries(items, { date, accountId } = {}) {
+  const s = requireSession()
+  const db = loadDb()
+  const led = db.ledgers.find((l) => l.id === s.ledger_id)
+  if (!led || led.settlement_kind !== 'personal') {
+    throw new Error('仅个人账支持批量记入')
+  }
+  const list = db.entries[s.ledger_id] || (db.entries[s.ledger_id] = [])
+  const day = date || new Date().toISOString().slice(0, 10)
+  const ids = []
+  for (const it of items || []) {
+    const amount = Math.abs(Number(it.amount) || 0)
+    if (!amount) continue
+    const fields = {
+      amount,
+      direction: it.direction === 'income' ? 'income' : 'expense',
+      categoryId: it.categoryId || 'other_out',
+      note: it.note || '',
+      accountId: accountId || it.accountId || null,
+      dayExtras: []
+    }
+    const body = {
+      id: uid(),
+      date: it.date || day,
+      fields,
+      groups: [],
+      extras: [],
+      override_total: null,
+      summary: fields.note || null
+    }
+    list.push(body)
+    applyAccountDelta(led, fields, false)
+    ids.push(body.id)
+  }
+  led.updated_at = Date.now()
+  saveDb(db)
+  return { ids, count: ids.length }
+}
+
+export async function listAccounts() {
+  const led = await getLedger()
+  return led.accounts || []
+}
+
+export async function upsertAccount({ id, name, balance }) {
+  const s = requireSession()
+  const db = loadDb()
+  const led = db.ledgers.find((l) => l.id === s.ledger_id)
+  if (!led || led.settlement_kind !== 'personal') throw new Error('仅个人账')
+  const accounts = ensureAccounts(led)
+  const n = String(name || '').trim()
+  if (!n) throw new Error('请填写账户名')
+  if (id) {
+    const row = accounts.find((a) => a.id === id)
+    if (!row) throw new Error('账户不存在')
+    row.name = n
+    if (balance != null && balance !== '') row.balance = Number(balance) || 0
+  } else {
+    accounts.push({ id: uid(), name: n, balance: Number(balance) || 0 })
+  }
+  led.updated_at = Date.now()
+  saveDb(db)
+  return { ok: true }
+}
+
+export async function removeAccount(id) {
+  const s = requireSession()
+  const db = loadDb()
+  const led = db.ledgers.find((l) => l.id === s.ledger_id)
+  if (!led) throw new Error('账本不存在')
+  led.accounts = ensureAccounts(led).filter((a) => a.id !== id)
+  saveDb(db)
+  return { ok: true }
+}
+
+export async function listGoals() {
+  const led = await getLedger()
+  return led.goals || []
+}
+
+export async function upsertGoal({ id, name, target, current }) {
+  const s = requireSession()
+  const db = loadDb()
+  const led = db.ledgers.find((l) => l.id === s.ledger_id)
+  if (!led || led.settlement_kind !== 'personal') throw new Error('仅个人账')
+  const goals = ensureGoals(led)
+  const n = String(name || '').trim()
+  if (!n) throw new Error('请填写目标名称')
+  if (id) {
+    const row = goals.find((g) => g.id === id)
+    if (!row) throw new Error('目标不存在')
+    row.name = n
+    if (target != null) row.target = Number(target) || 0
+    if (current != null) row.current = Number(current) || 0
+  } else {
+    goals.push({
+      id: uid(),
+      name: n,
+      target: Number(target) || 0,
+      current: Number(current) || 0
+    })
+  }
+  led.updated_at = Date.now()
+  saveDb(db)
+  return { ok: true }
+}
+
+export async function removeGoal(id) {
+  const s = requireSession()
+  const db = loadDb()
+  const led = db.ledgers.find((l) => l.id === s.ledger_id)
+  if (!led) throw new Error('账本不存在')
+  led.goals = ensureGoals(led).filter((g) => g.id !== id)
+  saveDb(db)
+  return { ok: true }
+}
+
+/**
+ * CSV：日期,收支,分类名,金额,备注
+ * 收支：收入/支出 或 income/expense
+ */
+export async function importPersonalCsv(text) {
+  const lines = String(text || '')
+    .replace(/^\uFEFF/, '')
+    .split(/\r?\n/)
+    .map((l) => l.trim())
+    .filter(Boolean)
+  if (!lines.length) throw new Error('CSV 为空')
+  const led = await getLedger()
+  const catByName = new Map(
+    (led.categories || []).map((c) => [c.name, c])
+  )
+  const items = []
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i]
+    if (i === 0 && /日期/.test(line)) continue
+    const cols = line.split(/[,，\t]/).map((c) => c.trim())
+    if (cols.length < 4) continue
+    const [date, dirRaw, catName, amountStr, note = ''] = cols
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) continue
+    const amount = Math.abs(Number(amountStr) || 0)
+    if (!amount) continue
+    const isIncome = /收入|income|\+/i.test(dirRaw)
+    const cat =
+      catByName.get(catName) ||
+      (isIncome
+        ? { id: 'other_in', direction: 'income' }
+        : { id: 'other_out', direction: 'expense' })
+    items.push({
+      date,
+      amount,
+      direction: isIncome ? 'income' : 'expense',
+      categoryId: cat.id,
+      note: note || catName || ''
+    })
+  }
+  if (!items.length) throw new Error('没有可导入的有效行')
+  return bulkAddPersonalEntries(items)
 }
 
 export async function listExtras() {
@@ -354,6 +791,33 @@ export async function updateTemplate({ id, name, fields, settlement }) {
   if (settlement) t.settlement = settlement
   saveDb(db)
   return { ok: true }
+}
+
+/** 导出整库备份（对象，调用方序列化下载） */
+export async function exportBackup() {
+  const db = loadDb()
+  return wrapBackup(db)
+}
+
+/**
+ * 导入整库备份，覆盖本机数据并清除会话
+ * @param {string|object} raw
+ */
+export async function importBackup(raw) {
+  const checked = validateBackup(raw)
+  if (!checked.ok) throw new Error(checked.error)
+  const db = checked.db
+  // 补齐缺省字段
+  if (!Array.isArray(db.templates)) db.templates = []
+  if (!db.extras || typeof db.extras !== 'object') db.extras = {}
+  ensureBuiltinTemplates(db)
+  saveDb(db)
+  localStorage.removeItem(SESSION_KEY)
+  return {
+    ok: true,
+    ledgerCount: db.ledgers.length,
+    entryKeys: Object.keys(db.entries || {}).length
+  }
 }
 
 export { getToken, getSession }

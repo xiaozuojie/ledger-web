@@ -8,7 +8,15 @@ const route = useRoute()
 
 const showTabBar = computed(() => {
   if (!getToken()) return false
-  const hide = new Set(['home', 'open', 'entry', 'template-edit', 'templates'])
+  const hide = new Set([
+    'home',
+    'auth',
+    'open',
+    'entry',
+    'personal-entry',
+    'template-edit',
+    'templates'
+  ])
   return !hide.has(route.name)
 })
 </script>

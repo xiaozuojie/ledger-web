@@ -35,7 +35,9 @@ const result = computed(() =>
       laborUnitPrice: Number(laborUnitPrice.value) || 0,
       truckUnitPrice: Number(truckUnitPrice.value) || 0
     },
-    extras: extras.value
+    extras: extras.value,
+    feeTypes: ledger.value?.feeTypes,
+    ledger: ledger.value
   })
 )
 

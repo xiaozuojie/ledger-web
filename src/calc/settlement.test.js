@@ -50,4 +50,32 @@ describe('mixed settlement', () => {
     expect(r.extrasSum).toBe(100)
     expect(r.total).toBe(1 * 100 + 2 * 200 + 100)
   })
+
+  it('adds custom fee type into total and breakdown', () => {
+    const r = computeMixed({
+      entries: [
+        {
+          fields: { trucks: '1车', feeQtys: { foam: 2 } },
+          overrideTotal: 1
+        }
+      ],
+      rates: { truckUnitPrice: 100, laborUnitPrice: 200 },
+      extras: [],
+      feeTypes: [
+        { id: 'truck', name: '渣土车', kind: 'qty', unitPrice: 100, builtin: true },
+        {
+          id: 'labor',
+          name: '做卫生',
+          kind: 'work_days',
+          unitPrice: 200,
+          builtin: true
+        },
+        { id: 'extra', name: '零星', kind: 'fixed', builtin: true },
+        { id: 'foam', name: '泡沫车', kind: 'qty', unit: '车', unitPrice: 50 }
+      ]
+    })
+    expect(r.customFeeSum).toBe(100)
+    expect(r.total).toBe(100 + 200 + 100)
+    expect(r.feeBreakdown.find((x) => x.id === 'foam').amount).toBe(100)
+  })
 })

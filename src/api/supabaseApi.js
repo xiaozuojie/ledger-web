@@ -1,10 +1,20 @@
 import { supabase, hasSupabase } from '../lib/supabase.js'
 import { getToken, setSession, clearSession } from '../lib/session.js'
+import { signOut } from '../lib/auth.js'
+
+const TPL = {
+  field_labor: '11111111-1111-1111-1111-111111111111',
+  field_mixed: '22222222-2222-2222-2222-222222222222',
+  personal: '33333333-3333-3333-3333-333333333333'
+}
 
 function rpcError(err) {
   const msg = (err && (err.message || err.error_description)) || '请求失败'
+  if (/UNAUTHORIZED.*login/i.test(msg)) {
+    return new Error('请先登录后再创建云端账本')
+  }
   if (/UNAUTHORIZED/i.test(msg)) {
-    return new Error('会话已过期，请从首页重新进入账本')
+    return new Error('会话已过期，请重新登录或从首页进入账本')
   }
   if (/NOT_FOUND ledger/i.test(msg)) {
     return new Error('账本不存在或链接无效')
@@ -49,8 +59,14 @@ export async function unlockLedger({ inviteSlug }) {
   return openLedger(inviteSlug)
 }
 
-export function logout() {
+export async function logout() {
   clearSession()
+  await signOut()
+}
+
+export async function createLedgerByMode({ name, mode }) {
+  const templateId = TPL[mode] || TPL.field_mixed
+  return createLedger({ name, templateId })
 }
 
 export async function getLedger() {
@@ -161,4 +177,68 @@ export async function updateTemplate({ id, name, fields, settlement }) {
     p_fields: fields,
     p_settlement: settlement
   })
+}
+
+/** 云端尚未建 feeTypes 表：首页汇总 / 类型管理仅本地模式完整支持 */
+export async function listAllLedgerBundles() {
+  throw new Error('云端模式暂不支持首页全量汇总，请用本地模式或稍后升级')
+}
+
+export async function listFeeTypes() {
+  const led = await getLedger()
+  const { defaultFeeTypes, normalizeFeeTypes } = await import(
+    '../calc/feeTypes.js'
+  )
+  return normalizeFeeTypes(led.feeTypes, led.settlement_kind || 'mixed').length
+    ? normalizeFeeTypes(led.feeTypes, led.settlement_kind || 'mixed')
+    : defaultFeeTypes(led.settlement_kind || 'mixed')
+}
+
+export async function addFeeType() {
+  throw new Error('云端模式暂不支持自定义计费类型')
+}
+
+export async function updateFeeType() {
+  throw new Error('云端模式暂不支持自定义计费类型')
+}
+
+export async function removeFeeType() {
+  throw new Error('云端模式暂不支持自定义计费类型')
+}
+
+export async function updateBudget() {
+  throw new Error('云端模式暂不支持月预算')
+}
+
+export async function bulkAddPersonalEntries() {
+  throw new Error('云端模式暂不支持批量记账')
+}
+export async function listAccounts() {
+  return []
+}
+export async function upsertAccount() {
+  throw new Error('云端模式暂不支持资产账户')
+}
+export async function removeAccount() {
+  throw new Error('云端模式暂不支持资产账户')
+}
+export async function listGoals() {
+  return []
+}
+export async function upsertGoal() {
+  throw new Error('云端模式暂不支持存钱目标')
+}
+export async function removeGoal() {
+  throw new Error('云端模式暂不支持存钱目标')
+}
+export async function importPersonalCsv() {
+  throw new Error('云端模式暂不支持 CSV 导入')
+}
+
+export async function exportBackup() {
+  throw new Error('云端模式请用数据库备份；本机整库导出仅本地模式')
+}
+
+export async function importBackup() {
+  throw new Error('云端模式暂不支持本机 JSON 导入')
 }

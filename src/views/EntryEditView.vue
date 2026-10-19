@@ -33,6 +33,10 @@ const hint = ref('')
 const dayExtrasTotal = computed(() =>
   dayExtras.value.reduce((s, x) => s + (Number(x.amount) || 0), 0)
 )
+/** 自定义计费数量：typeId → 数量或固定金额 */
+const feeQtys = ref({})
+const customTypes = ref([])
+const focusTypeId = computed(() => String(route.query.typeId || ''))
 
 const truckStep = computed({
   get() {
@@ -46,9 +50,24 @@ const truckStep = computed({
 
 onMounted(async () => {
   date.value = todayStr()
+  try {
+    const led = await api.getLedger()
+    customTypes.value = (led.feeTypes || []).filter(
+      (t) => !t.builtin && t.enabled !== false
+    )
+  } catch {
+    /* 会话异常时后续 save 会报 */
+  }
   if (route.query.focus === 'trucks' && !entryId.value) {
     trucks.value = '1车'
     hint.value = '已预填 1 车，可改车数后保存'
+  }
+  if (route.query.focus === 'fee' && focusTypeId.value && !entryId.value) {
+    feeQtys.value = { ...feeQtys.value, [focusTypeId.value]: 1 }
+    const t = customTypes.value.find((x) => x.id === focusTypeId.value)
+    hint.value = t
+      ? `已预填 ${t.name} 1 ${t.unit || ''}，可改后保存`
+      : '已预填自定义数量 1'
   }
   if (!entryId.value) return
   try {
@@ -72,6 +91,7 @@ onMounted(async () => {
     }
     trucks.value = (row.fields && row.fields.trucks) || ''
     laborNote.value = (row.fields && row.fields.laborNote) || ''
+    feeQtys.value = { ...((row.fields && row.fields.feeQtys) || {}) }
     dayExtras.value = (row.extras || []).map((x) => ({
       id: x.id || crypto.randomUUID(),
       name: x.name || '零星',
@@ -155,9 +175,15 @@ async function save() {
   if (!laborNoteTouched.value) {
     note = buildLaborNote(mapped, workDays) || note
   }
+  const cleanedQtys = {}
+  for (const [k, v] of Object.entries(feeQtys.value || {})) {
+    const n = Number(v)
+    if (n) cleanedQtys[k] = n
+  }
   const fields = {
     trucks: trucks.value || '',
-    laborNote: note
+    laborNote: note,
+    feeQtys: cleanedQtys
   }
   saving.value = true
   try {
@@ -307,6 +333,26 @@ async function remove() {
       placeholder="可自动生成，也可手写纸面原文"
       @input="laborNoteTouched = true"
     />
+  </div>
+  <div v-if="customTypes.length" class="card" id="custom-fee-block">
+    <h3>其他计费</h3>
+    <p class="muted" style="margin-top: -6px">自定义类型：数量×单价或固定金额</p>
+    <div v-for="t in customTypes" :key="t.id" style="margin-bottom: 10px">
+      <label
+        >{{ t.name }}（{{
+          t.kind === 'fixed' ? '金额' : `数量 / ${t.unit || '次'}`
+        }}{{
+          t.kind === 'qty' && t.unitPrice != null ? ` · ${t.unitPrice}元` : ''
+        }}）</label
+      >
+      <input
+        :value="feeQtys[t.id] ?? ''"
+        type="number"
+        inputmode="decimal"
+        :placeholder="t.kind === 'fixed' ? '0' : '0'"
+        @input="feeQtys[t.id] = $event.target.value"
+      />
+    </div>
   </div>
   <div class="card">
     <h3>当日零星</h3>

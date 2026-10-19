@@ -1,5 +1,20 @@
 -- Ledger Web: run entire file in Supabase SQL Editor
+-- pgcrypto 在 Supabase 常落在 extensions schema；再补 public 包装见 patch-pgcrypto-public.sql
+create extension if not exists pgcrypto with schema extensions;
 create extension if not exists pgcrypto;
+
+create or replace function public.gen_random_bytes(n integer)
+returns bytea language sql security definer set search_path = extensions, public
+as $$ select extensions.gen_random_bytes(n) $$;
+create or replace function public.gen_salt(type text)
+returns text language sql security definer set search_path = extensions, public
+as $$ select extensions.gen_salt(type) $$;
+create or replace function public.gen_salt(type text, iter_count integer)
+returns text language sql security definer set search_path = extensions, public
+as $$ select extensions.gen_salt(type, iter_count) $$;
+create or replace function public.crypt(password text, salt text)
+returns text language sql security definer set search_path = extensions, public
+as $$ select extensions.crypt(password, salt) $$;
 
 create table if not exists templates (
   id uuid primary key default gen_random_uuid(),

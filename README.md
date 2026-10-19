@@ -1,17 +1,20 @@
-# 记账网页版（GitHub Pages + Supabase）
+# 胖虎记账网页版（GitHub Pages + Supabase）
 
-**账本开放**：首页可看到全部账本，点进即用；分享 `/l/<邀请码>` 链接即可，**无需口令/单独授权**。  
-功能含综合样表、工时账本、模板编辑、导出/结算图。
+- **本地模式**（默认无密钥）：浏览器 localStorage，可完整使用 P1～P4  
+- **云端 C1**：配置 Supabase 后邮箱登录；「我的账本」按账号同步；分享 `/l/<slug>` 仍可打开  
 
 ## 1. 准备 Supabase（免费）
 
-1. 打开 [https://supabase.com](https://supabase.com) 注册并 **New project**
-2. 进入 **SQL Editor**，粘贴并运行本目录 `supabase/schema.sql` 全文  
-   - 若以前已经跑过旧版 schema（带口令），再执行一次 `supabase/patch-open-access.sql`
-3. **Project Settings → API** 复制：
-   - Project URL → `VITE_SUPABASE_URL`
-   - `anon` `public` key → `VITE_SUPABASE_ANON_KEY`
-4. 免费项目约一周无活动可能暂停，在控制台 **Restore** 即可
+1. 打开 [https://supabase.com](https://supabase.com) 注册并 **New project**  
+2. **SQL Editor** 依次执行：  
+   - `supabase/schema.sql`（新库；已含 pgcrypto public 包装时可不另跑）  
+   - `supabase/patch-pgcrypto-public.sql`（若建账报 `gen_random_bytes does not exist`）  
+   - `supabase/patch-open-access.sql`（若库是旧口令版）  
+   - **`supabase/patch-c1-auth-owner.sql`（C1 账号归属，必跑）**  
+3. **Authentication → Providers → Email** 开启邮箱密码（可按需关闭「确认邮件」方便自测）  
+4. **Project Settings → API** 复制：  
+   - Project URL → `VITE_SUPABASE_URL`  
+   - `anon` `public` key → `VITE_SUPABASE_ANON_KEY`  
 
 **不要**把 `service_role` 写进前端或 GitHub。
 
@@ -26,18 +29,20 @@ npm test
 npm run dev
 ```
 
-浏览器打开终端提示的本地地址。创建账本后点「复制链接」发给协作者即可（开放读写）。
+浏览器打开本地地址。云端模式：先注册/登录，再建「我的账本」；复制链接可给别人打开（C2 再做成员权限）。
 
 ## 3. 部署到 GitHub Pages
 
 1. 新建 GitHub 仓库，把 `web` 目录（或整个小程序工程）推上去  
 2. 仓库 **Settings → Secrets and variables → Actions** 添加：
    - `VITE_SUPABASE_URL`
-   - `VITE_SUPABASE_ANON_KEY`
-3. 将 `.github/workflows/deploy-pages.yml` 放到**仓库根**的 `.github/workflows/`（若仓库根就是 `web`，把 `working-directory: web` 删掉并改 artifact 路径为 `dist`）
-4. **Settings → Pages → Source** 选 GitHub Actions
-5. 推送 `main` 后查看 Actions；成功后访问：  
-   `https://<用户名>.github.io/<仓库名>/`
+   - `VITE_SUPABASE_ANON_KEY`  
+   （有密钥即云端构建；**不要**在 workflow 里写死 `VITE_DATA_MODE=local`）
+3. **Settings → Pages → Source** 选 GitHub Actions
+4. 推送 `main` 后查看 Actions；成功后访问：  
+   `https://xiaozuojie.github.io/ledger-web/`  
+   分享某本账：`https://xiaozuojie.github.io/ledger-web/l/<邀请码>`
+5. Supabase **Authentication → URL Configuration**：Site URL 填上述首页；Redirect URLs 可加同域 `/**`
 
 本地打包预览：
 
@@ -53,4 +58,4 @@ npm run preview
 
 ## 5. 安全说明
 
-口令哈希存在数据库；适合熟人小范围。口令泄露等于账本公开。
+C1 起建账归属登录用户；`service_role` 禁止进前端。分享链接仍可进入账本（C2 收紧）。强制本地：`VITE_DATA_MODE=local`。
